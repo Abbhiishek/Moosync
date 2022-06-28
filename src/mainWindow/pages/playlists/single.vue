@@ -63,7 +63,7 @@ export default class SinglePlaylistView extends mixins(ContextMenuMixin) {
   get defaultDetails(): SongDetailDefaults {
     return {
       defaultTitle: this.playlist?.playlist_name ?? '',
-      defaultSubSubtitle: `${(this.playlist?.playlist_song_count || this.songList.length) ?? 0} Songs`,
+      defaultSubSubtitle: `${this.songList.length} Songs`,
       defaultCover: this.playlist?.playlist_coverPath ?? ''
     }
   }
@@ -165,8 +165,8 @@ export default class SinglePlaylistView extends mixins(ContextMenuMixin) {
         packageName: extension
       })
 
-      if (data[extension]) {
-        this.songList.push(...(data[extension] as GetPlaylistSongsReturnType).songs)
+      if (data && data[extension]) {
+        this.songList.push(...(data[extension] as SongsReturnType).songs)
       }
     }
   }
@@ -186,17 +186,12 @@ export default class SinglePlaylistView extends mixins(ContextMenuMixin) {
     }
   }
 
-  private sort(options: SongSortOptions) {
-    vxm.themes.songSortBy = options
-  }
-
   private getSongMenu(event: Event, songs: Song[]) {
     this.getContextMenu(event, {
-      type: 'PLAYLIST_CONTENT',
+      type: 'SONGS',
       args: {
         songs: songs,
         isRemote: !!this.isRemote,
-        sortOptions: { callback: this.sort, current: vxm.themes.songSortBy },
         refreshCallback: () => (this.songList = arrayDiff<Song>(this.songList, songs))
       }
     })

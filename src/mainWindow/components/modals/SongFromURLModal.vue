@@ -14,7 +14,13 @@
         <b-row no-gutters class="d-flex">
           <b-col cols="auto">
             <SongDefault v-if="forceEmptyImg || !parsedSong || !getValidImageHigh(parsedSong)" class="song-url-cover" />
-            <b-img v-else class="song-url-cover" :src="getValidImageHigh(parsedSong)" @error="handleImageError"></b-img>
+            <b-img
+              v-else
+              class="song-url-cover"
+              :src="getValidImageHigh(parsedSong)"
+              @error="handleImageError"
+              referrerPolicy="no-referrer"
+            ></b-img>
           </b-col>
           <b-col cols="9">
             <b-row no-gutters class="song-url-details">
@@ -64,6 +70,7 @@ import { vxm } from '@/mainWindow/store'
 import { v4 } from 'uuid'
 import { mixins } from 'vue-class-component'
 import ImgLoader from '@/utils/ui/mixins/ImageLoader'
+import RemoteSong from '@/utils/ui/mixins/remoteSongMixin'
 
 @Component({
   components: {
@@ -71,7 +78,7 @@ import ImgLoader from '@/utils/ui/mixins/ImageLoader'
     InputGroup
   }
 })
-export default class SongFromUrlModal extends mixins(ImgLoader) {
+export default class SongFromUrlModal extends mixins(ImgLoader, RemoteSong) {
   @Prop({ default: 'SongFromURL' })
   private id!: string
 
@@ -114,9 +121,11 @@ export default class SongFromUrlModal extends mixins(ImgLoader) {
       data: [url]
     })
 
-    for (const value of Object.values(res)) {
-      if (value && value.song) {
-        return value.song
+    if (res) {
+      for (const value of Object.values(res)) {
+        if (value && value.song) {
+          return value.song
+        }
       }
     }
   }
@@ -153,13 +162,11 @@ export default class SongFromUrlModal extends mixins(ImgLoader) {
 
   private addToLibrary() {
     if (this.parsedSong) {
-      window.DBUtils.storeSongs([
-        {
-          ...this.parsedSong,
-          title: this.songTitle,
-          artists: this.getArtists(this.songArtist)
-        }
-      ])
+      this.addSongsToLibrary({
+        ...this.parsedSong,
+        title: this.songTitle,
+        artists: this.getArtists(this.songArtist)
+      })
 
       this.refreshCallback && this.refreshCallback()
       this.close()

@@ -19,7 +19,9 @@ import {
   FormTextareaPlugin,
   LinkPlugin,
   SpinnerPlugin,
-  FormTagsPlugin
+  FormTagsPlugin,
+  FormCheckboxPlugin,
+  DropdownPlugin
 } from 'bootstrap-vue'
 import Vue from 'vue'
 
@@ -35,3 +37,5 @@ Vue.use(FormTextareaPlugin)
 Vue.use(LinkPlugin)
 Vue.use(SpinnerPlugin)
 Vue.use(FormTagsPlugin)
+Vue.use(FormCheckboxPlugin)
+Vue.use(DropdownPlugin)

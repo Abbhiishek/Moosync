@@ -16,6 +16,9 @@ export class DashPlayer extends Player {
 
   private isAttachedView = false
 
+  private track: MediaElementAudioSourceNode | undefined
+  private context: AudioContext | undefined
+
   constructor(element: HTMLVideoElement) {
     super()
     this.htmlElement = element
@@ -34,11 +37,11 @@ export class DashPlayer extends Player {
   }
 
   async play(): Promise<void> {
-    this.isAttachedView && this.playerInstance.play()
+    this.isAttachedView && this.playerInstance?.play()
   }
 
   pause(): void {
-    this.isAttachedView && this.playerInstance.pause()
+    this.isAttachedView && this.playerInstance?.pause()
   }
 
   stop(): void {
@@ -102,5 +105,23 @@ export class DashPlayer extends Player {
 
   removeAllListeners(): void {
     // TODO
+  }
+
+  createAudioContext() {
+    if (!this.context) {
+      this.context = new AudioContext()
+      this.track = this.context.createMediaElementSource(this.playerInstance.getVideoElement())
+      this.track.connect(this.context.destination)
+    }
+    return this.context
+  }
+  connectAudioContextNode(node: AudioNode): void {
+    if (this.context && this.track) {
+      this.track.connect(node).connect(this.context.destination)
+    }
+  }
+
+  preload(src: string): void {
+    return
   }
 }

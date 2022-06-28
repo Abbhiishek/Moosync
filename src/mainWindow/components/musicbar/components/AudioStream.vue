@@ -8,19 +8,20 @@
 -->
 
 <template>
-  <div>
-    <div ref="audioHolder">
-      <div id="yt-player" class="yt-player"></div>
+  <div class="h-100 w-100">
+    <div ref="audioHolder" class="h-100 w-100">
+      <div class="w-100 h-100">
+        <div class="yt-player" ref="yt-player" id="yt-player"></div>
+      </div>
       <audio id="dummy-yt-player" />
-      <audio ref="audio" preload="auto" />
-      <video ref="dash-player"></video>
+      <audio ref="audio" preload="auto" crossorigin="anonymous" />
+      <video ref="dash-player" class="dash-player" crossorigin="anonymous"></video>
     </div>
   </div>
 </template>
 
 <script lang="ts">
 import { Component, Prop, Ref, Watch } from 'vue-property-decorator'
-import YTPlayer from 'yt-player'
 import { mixins } from 'vue-class-component'
 import { Player } from '@/utils/ui/players/player'
 import { YoutubePlayer } from '@/utils/ui/players/youtube'
@@ -36,6 +37,7 @@ import { DashPlayer } from '../../../../utils/ui/players/dash'
 @Component({})
 export default class AudioStream extends mixins(SyncMixin, PlayerControls, ErrorHandler) {
   @Ref('audio') audioElement!: HTMLAudioElement
+  @Ref('yt-player') ytAudioElement!: HTMLDivElement
 
   @Prop({ default: '' })
   roomID!: string
@@ -90,6 +92,14 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
 
   private _bufferTrap: ReturnType<typeof setTimeout> | undefined
 
+  private get showYTPlayer() {
+    return vxm.themes.showPlayer
+  }
+
+  private set showYTPlayer(show: number) {
+    vxm.themes.showPlayer = show
+  }
+
   get songRepeat() {
     return vxm.player.Repeat
   }
@@ -129,6 +139,17 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
     }
   }
 
+  private getAudioPlayer(parsedType: 'LOCAL' | 'YOUTUBE' | 'DASH'): Player {
+    switch (parsedType) {
+      case 'LOCAL':
+        return this.localPlayer
+      case 'YOUTUBE':
+        return this.ytPlayer
+      case 'DASH':
+        return this.dashPlayer
+    }
+  }
+
   /**
    * Method called when player type changes
    * This method is responsible of detaching old player
@@ -139,23 +160,22 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
     if (this.activePlayerTypes !== parsedType) {
       console.debug('Changing player type to', newType)
       this.unloadAudio()
-      this.activePlayer.removeAllListeners()
 
-      switch (parsedType) {
-        case 'LOCAL':
-          this.activePlayer = this.localPlayer
-          break
-        case 'YOUTUBE':
-          this.activePlayer = this.ytPlayer
-          break
-        case 'DASH':
-          this.activePlayer = this.dashPlayer
-          break
+      // Old active player may be null when window loads
+      this.activePlayer?.removeAllListeners()
+
+      this.activePlayer = this.getAudioPlayer(parsedType)
+
+      // Players might not have been initialized
+      if (this.activePlayer) {
+        this.activePlayer.volume = vxm.player.volume
+        this.registerPlayerListeners()
+        this.activePlayerTypes = parsedType
       }
 
-      this.activePlayer.volume = vxm.player.volume
-      this.registerPlayerListeners()
-      this.activePlayerTypes = parsedType
+      this.showYTPlayer = this.useEmbed && this.activePlayerTypes === 'YOUTUBE' ? 2 : 0
+
+      this.analyserNode = undefined
     }
 
     return parsedType
@@ -166,10 +186,13 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
    * This method is responsible for loading the current song in active player
    * or unloading the player if current song is empty
    */
-  @Watch('currentSong')
+  @Watch('currentSong', { immediate: true })
   onSongChanged(newSong: Song | null | undefined) {
     if (newSong) this.loadAudio(newSong, false)
-    else this.unloadAudio()
+    else {
+      this.unloadAudio()
+      this.showYTPlayer = 0
+    }
   }
 
   /**
@@ -187,8 +210,8 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
     if (this.isSyncing) this.remoteSeek(newValue)
   }
 
-  mounted() {
-    this.setupPlayers()
+  async mounted() {
+    await this.setupPlayers()
     this.setupSync()
     this.registerListeners()
 
@@ -198,25 +221,36 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
   @Ref('dash-player')
   private dashPlayerDiv!: HTMLVideoElement
 
+  private useEmbed = true
+
   /**
    * Initial setup for all players
    */
-  private setupPlayers() {
-    vxm.providers.$watch(
-      'useInvidious',
-      (val) => {
-        if (val) {
-          this.ytPlayer = new InvidiousPlayer(this.audioElement)
-        } else {
-          this.ytPlayer = new YoutubePlayer(new YTPlayer('#yt-player'))
-        }
-      },
-      { deep: false, immediate: true }
-    )
-    this.localPlayer = new LocalPlayer(this.audioElement)
-    this.dashPlayer = new DashPlayer(this.dashPlayerDiv)
-    this.activePlayer = this.localPlayer
-    this.activePlayerTypes = 'LOCAL'
+  private setupPlayers(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.localPlayer = new LocalPlayer(this.audioElement)
+      this.dashPlayer = new DashPlayer(this.dashPlayerDiv)
+      this.activePlayer = this.localPlayer
+      this.activePlayerTypes = 'LOCAL'
+      vxm.providers.$watch(
+        'useInvidious',
+        async (val) => {
+          if (val) {
+            this.ytPlayer = new InvidiousPlayer(this.audioElement)
+          } else {
+            this.useEmbed =
+              (await window.PreferenceUtils.loadSelective<Checkbox[]>('audio'))?.find(
+                (val) => val.key === 'youtube_embeds'
+              )?.enabled ?? true
+
+            this.ytPlayer = new YoutubePlayer(this.ytAudioElement, this.useEmbed)
+          }
+
+          resolve()
+        },
+        { deep: false, immediate: true }
+      )
+    })
   }
 
   private setupSync() {
@@ -239,6 +273,25 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
     }
   }
 
+  private analyserNode: AnalyserNode | undefined
+
+  // https://jameshfisher.com/2021/01/18/measuring-audio-volume-in-javascript
+  private isSilent() {
+    if (this.analyserNode) {
+      const pcmData = new Float32Array(this.analyserNode.fftSize)
+
+      this.analyserNode.getFloatTimeDomainData(pcmData)
+      let sumSquares = 0.0
+      for (const amplitude of pcmData) {
+        sumSquares += amplitude * amplitude
+      }
+      const amplitude = parseFloat(Math.sqrt(sumSquares / pcmData.length).toFixed(4))
+      console.debug('Got silence')
+      return amplitude === 0
+    }
+    return false
+  }
+
   /**
    * Register all listeners related to players
    */
@@ -247,7 +300,19 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
       vxm.player.loading = false
     }
 
-    this.activePlayer.onTimeUpdate = (time) => this.$emit('onTimeUpdate', time)
+    this.activePlayer.onTimeUpdate = async (time) => {
+      this.$emit('onTimeUpdate', time)
+
+      if (this.currentSong) {
+        if (time >= this.currentSong.duration - 10) {
+          await this.preloadNextSong()
+          if (this.isSilent()) {
+            this.nextSong()
+          }
+        }
+      }
+    }
+
     this.activePlayer.onError = (err) => {
       console.error('Player error', err.message, 'while playing', this.currentSong?.playbackUrl)
       console.error(`${this.currentSong?._id}: ${this.currentSong?.title} unplayable, skipping.`)
@@ -255,6 +320,7 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
       this.nextSong()
       vxm.player.loading = false
     }
+
     this.activePlayer.onStateChange = (state) => {
       // Cued event of youtube embed seems to fire only once and is not reliable
       // Stop loading when state of player changes
@@ -272,7 +338,23 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
       }
     }
 
-    this.activePlayer.onLoad = () => {
+    this.activePlayer.onLoad = async () => {
+      const preferences = await window.PreferenceUtils.loadSelective<Checkbox[]>('audio')
+      if (preferences) {
+        const gapless = preferences.find((val) => val.key === 'gapless_playback')
+        if (gapless && gapless.enabled) {
+          if (!this.analyserNode) {
+            const context = this.activePlayer.createAudioContext()
+            if (context) {
+              this.analyserNode = context.createAnalyser()
+              this.activePlayer.connectAudioContextNode(this.analyserNode)
+            }
+          }
+        } else {
+          this.analyserNode = undefined
+        }
+      }
+
       vxm.player.loading = false
       this.cancelBufferTrap()
     }
@@ -298,8 +380,8 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
     if (!this._bufferTrap) {
       this._bufferTrap = setTimeout(() => {
         if (this.activePlayerTypes === 'YOUTUBE' && this.activePlayer instanceof YoutubePlayer) {
-          this.activePlayer.setPlaybackQuality('small')
-          this.pause()
+          // this.activePlayer.setPlaybackQuality('small')
+          this?.pause()
           Vue.nextTick(() => this.play())
 
           console.debug('Triggered buffer trap')
@@ -357,21 +439,24 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
       }
     }
 
-    const data = await new Promise<{ url: string; duration: number } | undefined>((resolve, reject) => {
-      if (song.playbackUrl) {
-        const audio = new Audio()
-        audio.onloadedmetadata = () => {
-          if (song.playbackUrl) resolve({ url: song.playbackUrl, duration: audio.duration })
+    try {
+      const data = await new Promise<{ url: string; duration: number } | undefined>((resolve, reject) => {
+        if (song.playbackUrl) {
+          const audio = new Audio()
+          audio.onloadedmetadata = () => {
+            if (song.playbackUrl) resolve({ url: song.playbackUrl, duration: audio.duration })
+          }
+          audio.onerror = reject
+
+          audio.src = song.playbackUrl
+        } else {
+          resolve(undefined)
         }
-        audio.onerror = reject
-
-        audio.src = song.playbackUrl
-      } else {
-        resolve(undefined)
-      }
-    })
-
-    return data
+      })
+      return data
+    } catch (e) {
+      console.error('Failed to get duration for url', song.playbackUrl)
+    }
   }
 
   private metadataInterval: ReturnType<typeof setInterval> | undefined
@@ -399,8 +484,7 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
       for (const a of artworkList) {
         if (!a.startsWith('http')) {
           const blob = await (await fetch('media://' + a)).blob()
-          let objectURL = URL.createObjectURL(blob)
-          artwork.push({ src: objectURL })
+          artwork.push({ src: URL.createObjectURL(blob) })
         } else {
           artwork.push({ src: a })
         }
@@ -415,7 +499,9 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
 
       const dummyAudio: HTMLAudioElement = document.getElementById('dummy-yt-player') as HTMLAudioElement
 
-      if (this.parsePlayerTypes(this.activePlayerTypes) === 'YOUTUBE') {
+      // if (this.parsePlayerTypes(this.activePlayerTypes) === 'YOUTUBE') {
+
+      if (dummyAudio) {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const audio = require('../../../../assets/5-seconds-of-silence.mp3')
         dummyAudio.load()
@@ -424,9 +510,10 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
         dummyAudio.loop = true
         await dummyAudio.play()
         dummyAudio.volume = 0
-      } else {
-        dummyAudio.pause()
       }
+      // } else {
+      //   dummyAudio?.pause()
+      // }
 
       if (this.metadataInterval) {
         clearInterval(this.metadataInterval)
@@ -445,7 +532,7 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
 
       this.metadataInterval = setInterval(() => {
         setMetadata()
-      }, 10000)
+      }, 3000)
 
       console.debug('Set navigator mediaSession action handlers')
     }
@@ -463,16 +550,48 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
     }
   }
 
-  private duplicateSongChangeRequest: Song | undefined
+  private preloadStatus: 'PRELOADING' | 'PRELOADED' | undefined
 
-  private async loadAudio(song: Song, loadedState: boolean) {
-    if (this.duplicateSongChangeRequest?._id === song._id) {
-      console.debug('Got duplicate song request, ignoring')
-      this.duplicateSongChangeRequest = undefined
+  private async preloadNextSong() {
+    if (this.preloadStatus === 'PRELOADING' || this.preloadStatus === 'PRELOADED') {
       return
     }
 
-    this.unloadAudio()
+    console.debug('Preloading next track')
+
+    this.preloadStatus = 'PRELOADING'
+
+    const nextSong = vxm.player.queueData[vxm.player.queueOrder[vxm.player.queueIndex + 1]?.songID]
+    if (nextSong && !nextSong.path) {
+      if (!nextSong.playbackUrl || !nextSong.duration) await this.setPlaybackURLAndDuration(nextSong)
+
+      if (!nextSong.playbackUrl || !nextSong.duration) {
+        this.removeFromQueue(vxm.player.queueIndex + 1)
+        return
+      }
+
+      const audioPlayer = this.getAudioPlayer(this.parsePlayerTypes(nextSong.type))
+      audioPlayer.preload(nextSong.playbackUrl)
+    }
+
+    this.preloadStatus = 'PRELOADED'
+  }
+
+  private async setPlaybackURLAndDuration(song: Song) {
+    const res = await this.getPlaybackUrlAndDuration(song)
+    console.debug('Got playback url and duration', res)
+
+    if (res) {
+      // song is a reference to vxm.player.currentSong or vxm.sync.currentSong.
+      // Mutating those properties should also mutate song
+      if (vxm.player.currentSong && song) {
+        song.duration = res.duration
+        song.playbackUrl = res.url
+      }
+    }
+  }
+
+  private async loadAudio(song: Song, loadedState: boolean) {
     vxm.player.loading = true
 
     console.debug('Loading new song', song.title, song.type)
@@ -487,42 +606,34 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
     const PlayerTypes = this.onPlayerTypesChanged(song.type)
 
     if (!song.playbackUrl || !song.duration) {
+      // Since fetching playbackURL or duration can be a long running operation
+      // Unload previous song
+      this.unloadAudio()
+
       console.debug('PlaybackUrl or Duration empty for', song._id)
+      await this.setPlaybackURLAndDuration(song)
+    }
 
-      const res = await this.getPlaybackUrlAndDuration(song)
-      console.debug('Got playback url and duration', res)
-
-      if (res) {
-        this.duplicateSongChangeRequest = song
-        // song is a reference to vxm.player.currentSong or vxm.sync.currentSong.
-        // Mutating those properties should also mutate song
-        if (!this.isSyncing) {
-          if (vxm.player.currentSong) {
-            vxm.player.currentSong.duration = res.duration
-            Vue.set(vxm.player.currentSong, 'playbackUrl', res.url)
-          }
-        } else {
-          if (vxm.sync.currentSong) {
-            vxm.sync.currentSong.duration = res.duration
-            Vue.set(vxm.sync.currentSong, 'playbackUrl', res.url)
-          }
-        }
-      }
+    if (!song.path && (!song.playbackUrl || !song.duration)) {
+      this.removeFromQueue(vxm.player.queueIndex)
+      this.nextSong()
+      vxm.player.loading = false
+      return
     }
 
     if (PlayerTypes === 'LOCAL') {
-      this.activePlayer.load(
+      this.activePlayer?.load(
         song.path ? 'media://' + song.path : song.playbackUrl,
         this.volume,
         vxm.player.playAfterLoad || this.playerState === 'PLAYING'
       )
-      console.debug('Loaded song at', 'media://' + song.path)
+      console.debug('Loaded song at', song.path ? 'media://' + song.path : song.playbackUrl)
       vxm.player.loading = false
-    } else if (PlayerTypes) {
+    } else {
       console.debug('PlaybackUrl for song', song._id, 'is', song.playbackUrl)
       console.debug('Loaded song at', song.playbackUrl)
 
-      this.activePlayer.load(song.playbackUrl, this.volume, vxm.player.playAfterLoad || this.playerState !== 'PAUSED')
+      this.activePlayer?.load(song.playbackUrl, this.volume, vxm.player.playAfterLoad || this.playerState !== 'PAUSED')
     }
 
     vxm.player.playAfterLoad = false
@@ -532,25 +643,28 @@ export default class AudioStream extends mixins(SyncMixin, PlayerControls, Error
     this.handleFirstPlayback(loadedState)
 
     this.setMediaInfo(song)
+
+    // Clear preload status after song has changed
+    this.preloadStatus = undefined
   }
 
   private unloadAudio() {
     console.debug('Unloading audio')
-
-    this.activePlayer.stop()
+    this.activePlayer?.stop()
   }
 
   private async handleActivePlayerState(newState: PlayerState) {
     try {
       switch (newState) {
         case 'PLAYING':
-          return this.activePlayer.play()
+          return this.activePlayer?.play()
         case 'PAUSED':
-          return this.activePlayer.pause()
+          return this.activePlayer?.pause()
         case 'STOPPED':
           return this.unloadAudio()
       }
     } catch (e) {
+      console.debug(e)
       this.nextSong()
     }
   }
@@ -577,5 +691,8 @@ a {
 
 <style lang="sass">
 .yt-player
-  width: 0
+  border-radius: 16px
+
+.dash-player
+  width: 0 !important
 </style>

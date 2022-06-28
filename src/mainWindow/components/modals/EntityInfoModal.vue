@@ -14,7 +14,13 @@
         <b-row no-gutters class="d-flex">
           <b-col cols="auto">
             <SongDefault v-if="forceEmptyImg || !imgSrc" class="song-url-cover" />
-            <b-img v-else class="song-url-cover" :src="imgSrc" @error="handleImageError"></b-img>
+            <b-img
+              v-else
+              class="song-url-cover"
+              :src="imgSrc"
+              @error="handleImageError"
+              referrerPolicy="no-referrer"
+            ></b-img>
             <div @click="changeEntityCover" class="edit-button d-flex justify-content-center">
               <EditIcon class="align-self-center" />
             </div>
@@ -22,22 +28,23 @@
           <b-col class="details" cols="8" xl="9">
             <b-row>
               <b-col>
-                <b-input :title="title" class="title text-truncate editable" :value="title" @input="changeTitle">
+                <b-input :title="title" class="title text-truncate input-style" :value="title" @input="changeTitle">
                 </b-input>
               </b-col>
             </b-row>
             <b-row class="mt-1">
               <b-col class="field-col" cols="12" v-for="key in filterFields" :key="key">
                 <b-row no-gutters class="d-flex">
-                  <b-col cols="auto" class="field-title"> {{ key }}: </b-col>
+                  <b-col cols="auto" class="field-title"> {{ getParsedFieldTitle(key) }}: </b-col>
                   <b-col class="ml-1 d-flex align-items-center text-truncate">
                     <component
-                      class="text-truncate field-value w-100 editable"
+                      :class="`text-truncate field-value w-100 input-style ${isEditable(key) ? 'editable' : ''}`"
                       :is="isEditable(key) ? 'b-input' : 'div'"
-                      :value="entity[key]"
+                      :value="getValue(key)"
+                      placeholder="Enter value"
                       @input="changeEntityField(key, arguments[0])"
                     >
-                      <span class="text-truncate" v-if="!isEditable(key)">{{ entity[key] }}</span>
+                      <span class="text-truncate" v-if="!isEditable(key)">{{ getValue(key) }}</span>
                     </component>
                   </b-col>
                 </b-row>
@@ -60,6 +67,7 @@ import SongDefault from '@/icons/SongDefaultIcon.vue'
 import EditIcon from '@/icons/EditIcon.vue'
 import { bus } from '@/mainWindow/main'
 import { EventBus } from '@/utils/main/ipc/constants'
+import { dotIndex } from '@/utils/common'
 
 @Component({
   components: {
@@ -93,11 +101,19 @@ export default class EntityInfoModal extends Vue {
     return src
   }
 
-  private isEditable(field: keyof (Artists & Album & Playlist)) {
+  private getValue(key: string) {
+    if (this.entity) {
+      return dotIndex(this.entity, key)
+    }
+  }
+
+  private isEditable(field: string) {
     switch (field) {
       case 'album_artist':
       case 'artist_mbid':
       case 'playlist_desc':
+      case 'artist_extra_info.youtube.channel_id':
+      case 'artist_extra_info.spotify.artist_id':
         return true
     }
 
@@ -116,6 +132,19 @@ export default class EntityInfoModal extends Vue {
     const fields = []
     if (this.tmpEntity) {
       for (const key of Object.keys(this.tmpEntity)) {
+        if (
+          key === 'artist_extra_info' &&
+          'artist_extra_info' in this.tmpEntity &&
+          this.tmpEntity['artist_extra_info']
+        ) {
+          for (const [extraInfoKey, val] of Object.entries(this.tmpEntity['artist_extra_info'])) {
+            if (extraInfoKey === 'youtube' || extraInfoKey === 'spotify') {
+              fields.push(...Object.keys(val).map((val) => `${key}.${extraInfoKey}.${val}`))
+            }
+          }
+          continue
+        }
+
         switch (key as keyof (Album & Artists & Playlist)) {
           case 'album_name':
           case 'artist_name':
@@ -198,7 +227,7 @@ export default class EntityInfoModal extends Vue {
 
   private changeEntityField(field: never, value: never) {
     if (this.tmpEntity) {
-      this.tmpEntity[field] = value
+      dotIndex(this.tmpEntity, field, value)
     }
   }
 
@@ -215,6 +244,17 @@ export default class EntityInfoModal extends Vue {
       if ((this.tmpEntity as Playlist).playlist_id) {
         ;(this.tmpEntity as Playlist).playlist_name = value
       }
+    }
+  }
+
+  private getParsedFieldTitle(field: string) {
+    switch (field.toLowerCase()) {
+      case 'artist_extra_info.spotify.artist_id':
+        return 'spotify artist id'
+      case 'artist_extra_info.youtube.channel_id':
+        return 'youtube channel id'
+      default:
+        return field.replaceAll('_', ' ')
     }
   }
 
@@ -243,6 +283,7 @@ export default class EntityInfoModal extends Vue {
   font-size: 14px
   font-weight: 400
   width: auto
+  margin-left: 8px
 
 .modal-content-container
   max-height: 600px
@@ -287,7 +328,7 @@ export default class EntityInfoModal extends Vue {
   color: var(--textInverse)
   background-color: var(--accent)
 
-.editable
+.input-style
   background-color: transparent !important
   background: transparent !important
   border: none !important
@@ -295,6 +336,8 @@ export default class EntityInfoModal extends Vue {
   color: var(--textPrimary) !important
   height: inherit
   padding: 0 !important
+
+.editable
   border-bottom: transparent 1px solid !important
   &:focus
     border-bottom: var(--accent) 1px solid !important
@@ -304,8 +347,8 @@ export default class EntityInfoModal extends Vue {
 
 .edit-button
   position: absolute
-  width: 100%
-  height: 100%
+  width: 157px
+  height: 157px
   background: rgba(0, 0, 0, 0.6)
   top: 0
   left: 0

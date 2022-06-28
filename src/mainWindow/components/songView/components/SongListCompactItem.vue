@@ -37,6 +37,7 @@
               :src="iconURL"
             />
             <img
+              referrerPolicy="no-referrer"
               v-if="iconURL && iconType === 'URL' && !iconURL.endsWith('svg')"
               :src="iconURL"
               alt="provider icon"
@@ -97,7 +98,7 @@ import { vxm } from '@/mainWindow/store'
     AddToQueue
   }
 })
-export default class SongListCompact extends mixins(ImgLoader) {
+export default class SongListCompactItem extends mixins(ImgLoader) {
   private formattedDuration = convertDuration
 
   private iconType = ''
@@ -140,6 +141,7 @@ export default class SongListCompact extends mixins(ImgLoader) {
   }
 
   private onRowContext(event: MouseEvent, item: Song) {
+    event.stopPropagation()
     this.$emit('onRowContext', event, item)
   }
 

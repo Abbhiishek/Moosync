@@ -19,7 +19,9 @@ export const extensionRequestsKeys = [
   'set-secure-preferences',
   'register-oauth',
   'open-external',
-  'register-account'
+  'register-account',
+  'set-artist-editable-info',
+  'set-album-editable-info'
 ] as const
 export const extensionUIRequestsKeys = [
   'get-current-song',
@@ -47,6 +49,14 @@ export const mainRequestsKeys = [
   'perform-account-login'
 ] as const
 
+export const providerExtensionKeys = [
+  'get-search-providers',
+  'get-artist-songs-providers',
+  'get-album-songs-providers',
+  'get-playlist-providers'
+] as const
+
 export type extensionUIRequests = typeof extensionUIRequestsKeys[number] | typeof playerControlRequests[number]
 export type extensionRequests = typeof extensionRequestsKeys[number] | extensionUIRequests
 export type mainRequests = typeof mainRequestsKeys[number]
+export type providerFetchRequests = typeof providerExtensionKeys[number]

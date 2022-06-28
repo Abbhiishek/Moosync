@@ -59,13 +59,14 @@ import { bus } from '@/mainWindow/main'
 import { vxm } from '@/mainWindow/store'
 import SongDefault from '@/icons/SongDefaultIcon.vue'
 import ImgLoader from '@/utils/ui/mixins/ImageLoader'
+import RemoteSong from '@/utils/ui/mixins/remoteSongMixin'
 
 @Component({
   components: {
     SongDefault
   }
 })
-export default class NewPlaylistModal extends mixins(ImgLoader) {
+export default class NewPlaylistModal extends mixins(ImgLoader, RemoteSong) {
   @Prop({ default: 'NewPlaylistModal' })
   private id!: string
 
@@ -99,7 +100,7 @@ export default class NewPlaylistModal extends mixins(ImgLoader) {
       path = await window.FileUtils.savePlaylistCover(data)
     }
 
-    let playlist_id = await window.DBUtils.createPlaylist({
+    const playlist_id = await window.DBUtils.createPlaylist({
       playlist_name: this.title,
       playlist_coverPath: path,
       playlist_desc: this.desc
@@ -117,7 +118,7 @@ export default class NewPlaylistModal extends mixins(ImgLoader) {
   }
 
   private getValidImages() {
-    let mergableImages: string[] = []
+    const mergableImages: string[] = []
     for (const song of this.songs) {
       const cover = this.getValidImageHigh(song)
       if (cover) mergableImages.push(cover)
@@ -126,7 +127,7 @@ export default class NewPlaylistModal extends mixins(ImgLoader) {
   }
 
   private async createImage(src: string, quad: number, len: number, ctx: CanvasRenderingContext2D) {
-    let img = new Image()
+    const img = new Image()
     img.onload = () => this.drawImage(quad, len, ctx, img)
     img.crossOrigin = ''
     img.src = this.getImgSrc(src)
@@ -152,7 +153,7 @@ export default class NewPlaylistModal extends mixins(ImgLoader) {
   }
 
   private drawImage(quad: number, len: number, ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
-    let size = this.getImageSize(quad, len)
+    const size = this.getImageSize(quad, len)
     const dx = this.getCenter(img.naturalWidth, img.naturalHeight)
     switch (quad) {
       case 0:
@@ -171,20 +172,20 @@ export default class NewPlaylistModal extends mixins(ImgLoader) {
   }
 
   private drawWholeImage(ctx: CanvasRenderingContext2D, src: string) {
-    let img = new Image()
+    const img = new Image()
     img.src = this.getImgSrc(src)
     img.onload = () => ctx.drawImage(img, 0, 0, 800, 800)
   }
 
   private async mergeImages() {
-    let mergableImages = this.getValidImages()
+    const mergableImages = this.getValidImages()
 
     await this.$nextTick()
     if (mergableImages.length === 0) {
       this.forceEmptyImg = true
     } else {
       if (this.canvas) {
-        let ctx = this.canvas.getContext('2d')
+        const ctx = this.canvas.getContext('2d')
         if (ctx) {
           ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
           for (let i = 0; i < mergableImages.length; i++)
@@ -195,7 +196,6 @@ export default class NewPlaylistModal extends mixins(ImgLoader) {
   }
 
   private async addToPlaylist(playlist_id: string, songs: Song[]) {
-    await window.DBUtils.storeSongs(songs.filter((val) => val.type !== 'LOCAL'))
     await window.DBUtils.addToPlaylist(playlist_id, ...songs)
   }
 

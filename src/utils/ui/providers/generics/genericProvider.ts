@@ -34,6 +34,10 @@ export const cache = setupCache({
 })
 
 export abstract class GenericProvider {
+  abstract key: string
+
+  abstract loggedIn: boolean
+
   /**
    * Get user playlists
    * @returns Array of playlist fetched from users profile
@@ -82,7 +86,15 @@ export abstract class GenericProvider {
    * Get songs by artist ID
    * @param artist_id ID of artists whose tracks are to be fetched
    */
-  public abstract getArtistSongs(artist_id: string): AsyncGenerator<Song[]>
+  public abstract getArtistSongs(artist: Artists): AsyncGenerator<Song[]>
 
   public abstract searchSongs(term: string): Promise<Song[]>
+
+  public abstract getArtistDetails(artist: Artists, forceFetch?: boolean): Promise<Artists | undefined>
+
+  public abstract searchArtists(term: string): Promise<Artists[]>
+
+  public abstract searchPlaylists(term: string): Promise<Playlist[]>
+
+  public abstract searchAlbum(term: string): Promise<Album[]>
 }

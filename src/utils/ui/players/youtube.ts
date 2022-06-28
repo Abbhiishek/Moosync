@@ -7,18 +7,72 @@
  *  See LICENSE in the project root for license information.
  */
 
-import { Player } from './player'
-import YTPlayer from 'yt-player'
+import { Segment, SponsorBlock } from 'sponsorblock-api'
+import { v4 } from 'uuid'
+import { YTPlayerWrapper } from './wrapper/ytPlayer'
+import { LocalPlayer } from './local'
+import localforage from 'localforage'
 
 type YouTubePlayerQuality = 'small' | 'medium' | 'large' | 'hd720' | 'hd1080' | 'highres' | 'default'
 
-export class YoutubePlayer extends Player {
-  playerInstance: YTPlayer
-  private supposedVolume = 100
+export class YoutubePlayer extends LocalPlayer {
+  private sponsorBlock = new SponsorBlock(v4())
+  private cacheStore = localforage.createInstance({
+    driver: [localforage.INDEXEDDB],
+    name: 'SponsorBlock'
+  })
 
-  constructor(playerInstance: YTPlayer) {
-    super()
-    this.playerInstance = playerInstance
+  private currentSegments: Segment[] = []
+
+  constructor(playerInstance: HTMLDivElement, useEmbed = true) {
+    if (useEmbed) {
+      super(new YTPlayerWrapper(playerInstance))
+    } else {
+      const audio = document.createElement('audio')
+      audio.crossOrigin = 'anonymous'
+      audio.preload = 'auto'
+      playerInstance.append(audio)
+      super(audio)
+    }
+  }
+
+  private async storeCache(id: string, value: unknown) {
+    await this.cacheStore.setItem(id, { expiry: Date.now() + 6 * 60 * 60 * 1000, value })
+  }
+
+  private async getCache<T>(id: string): Promise<T | undefined> {
+    const cache = await this.cacheStore.getItem<{ expiry: number; value: T }>(id)
+    if (cache && cache.expiry > Date.now()) {
+      return cache.value
+    }
+  }
+
+  private async getSponsorblock(videoID: string) {
+    const preferences = await window.PreferenceUtils.loadSelective<Checkbox[]>('audio')
+    if (preferences) {
+      const sponsorblock = preferences.find((val) => val.key === 'sponsorblock')
+      if (sponsorblock && sponsorblock.enabled) {
+        let segments = await this.getCache<Segment[]>(videoID)
+        if (!segments) {
+          try {
+            segments = await this.sponsorBlock.getSegments(videoID, [
+              'sponsor',
+              'intro',
+              'music_offtopic',
+              'selfpromo',
+              'interaction',
+              'preview'
+            ])
+
+            await this.storeCache(videoID, segments)
+          } catch (e) {
+            console.warn('Sponsorblock error for id:', videoID, e)
+          }
+
+          if (segments) this.currentSegments = segments
+        }
+      }
+    }
   }
 
   private extractVideoID(url: string) {
@@ -30,79 +84,49 @@ export class YoutubePlayer extends Player {
     return url
   }
 
-  load(src?: string, volume?: number, autoplay?: boolean): void {
+  async load(src?: string, volume?: number, autoplay?: boolean) {
     if (src) {
       src = this.extractVideoID(src)
-      src && this.playerInstance.load(src, autoplay)
+      if (src) {
+        this.getSponsorblock(src)
+        if (this.playerInstance instanceof HTMLAudioElement) src = await window.SearchUtils.getYTAudioURL(src)
+      }
+    }
+
+    if (src) {
+      src && (this.playerInstance.src = src)
+      volume && (this.volume = volume)
+      autoplay && this.play()
     }
     volume && (this.volume = volume)
   }
 
-  async play(): Promise<void> {
-    this.playerInstance.play()
-    this.playerInstance.setVolume(this.volume)
-  }
-
-  pause(): void {
-    return this.playerInstance.pause()
-  }
-
-  stop(): void {
-    return this.playerInstance.stop()
-  }
-
-  get currentTime(): number {
-    return this.playerInstance.getCurrentTime()
-  }
-
-  set currentTime(time: number) {
-    this.playerInstance.seek(time)
-  }
-
-  get volume(): number {
-    return this.playerInstance.getVolume()
-  }
-
-  set volume(volume: number) {
-    this.supposedVolume = volume
-    this.playerInstance.setVolume(volume)
-  }
-
-  protected listenOnEnded(callback: () => void): void {
-    this.playerInstance.addListener('ended', callback)
-  }
-
   protected listenOnTimeUpdate(callback: (time: number) => void): void {
-    this.playerInstance.addListener('timeupdate', callback)
-  }
+    let lastTime = 0
+    this.playerInstance.ontimeupdate = () => {
+      const time = this.currentTime
+      if (time !== lastTime) {
+        if (this.currentSegments.length > 0) {
+          const segs = this.currentSegments.filter((val) => val.endTime > 1 && val.startTime === Math.floor(time))
+          if (segs.length > 0) {
+            const seg = segs.sort((a, b) => b.endTime - a.endTime).at(0)
+            if (seg) {
+              console.debug('Skipping segment', seg.endTime)
+              this.currentTime = seg.endTime
+              this.currentSegments.splice(this.currentSegments.indexOf(seg), 1)
+            }
+          }
+        }
 
-  protected listenOnLoad(callback: () => void): void {
-    this.playerInstance.addListener('cued', callback)
-  }
-
-  protected listenOnError(callback: (err: Error) => void): void {
-    this.playerInstance.addListener('error', callback)
-    this.playerInstance.addListener('unplayable', callback)
-  }
-
-  protected listenOnStateChange(callback: (state: PlayerState) => void): void {
-    this.playerInstance.addListener('playing', () => {
-      this.volume = this.supposedVolume
-      callback('PLAYING')
-    })
-    this.playerInstance.addListener('paused', () => callback('PAUSED'))
-    this.playerInstance.addListener('ended', () => callback('STOPPED'))
-  }
-
-  protected listenOnBuffer(callback: () => void): void {
-    this.playerInstance.addListener('buffering', callback)
-  }
-
-  removeAllListeners(): void {
-    this.playerInstance.removeAllListeners()
+        callback(time)
+        lastTime = time
+      }
+    }
   }
 
   public setPlaybackQuality(quality: YouTubePlayerQuality) {
-    this.playerInstance.setPlaybackQuality(quality)
+    if (this.playerInstance instanceof YTPlayerWrapper) {
+      this.playerInstance.setPlaybackQuality(quality)
+    }
   }
 }

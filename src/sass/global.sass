@@ -39,6 +39,9 @@ img
   width: 100%
   object-fit: cover
 
+.dropdown-item
+  color: var(--textPrimary) !important
+
 #app
   font-family: 'Nunito Sans'
   -webkit-font-smoothing: antialiased
@@ -97,14 +100,8 @@ img
 .control-row
   position: relative
 
-.details-col, .extra-col
-  position: absolute !important
-
 .details-col
   left: 0
-
-.extra-col
-  right: 0
 
 .gradient
   background: linear-gradient(176.27deg, var(--secondary) 1.69%, var(--primary) 72.01%)
@@ -112,7 +109,7 @@ img
 
 .b-sidebar
   transition: 0.2s
-  height: calc(100% - (6.5rem + 32px))
+  height: calc(100% - (6.5rem + 15px)) !important
 
 .b-sidebar-body
   overflow-x: hidden
@@ -362,7 +359,29 @@ img
 
 @import "./transitions"
 @import "./scrollbar"
-@import "node_modules/bootstrap/scss/mixins"
 @import 'node_modules/bootstrap/scss/bootstrap.scss'
+@import 'node_modules/bootstrap/scss/bootstrap-grid.scss'
 @import 'node_modules/bootstrap-vue/src/index.scss'
 @import 'node_modules/@voerro/vue-tagsinput/dist/style'
+
+@include media-breakpoint-down(md)
+  .slider-container
+    right: -200px
+    bottom: 85px
+    height: 40px
+    width: 175px
+    max-width: 175px
+    position: absolute
+    background: var(--tertiary)
+    border-radius: 16px
+    padding-left: 15px !important
+    transform: rotate(-90deg)
+    transform-origin: 0px 88px
+    transition: opacity 0.2s ease-in-out
+    z-index: 9999
+    opacity: 0
+
+@include media-breakpoint-up(lg)
+  .slider-container
+    position: static
+    opacity: 1

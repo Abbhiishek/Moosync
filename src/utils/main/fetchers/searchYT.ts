@@ -12,6 +12,7 @@ import { app } from 'electron'
 import path from 'path'
 import { CacheHandler } from './cacheFile'
 import ytsr from 'ytsr'
+import ytdl from 'ytdl-core'
 
 interface YTMusicWMatchIndex extends ytMusic.MusicVideo {
   matchIndex: number
@@ -54,7 +55,12 @@ export class YTScraper extends CacheHandler {
         artists:
           s.artists?.map((val) => ({
             artist_id: `youtube-author:${val.id}`,
-            artist_name: val.name
+            artist_name: val.name,
+            artist_extra_info: {
+              youtube: {
+                channel_id: val.id
+              }
+            }
           })) ?? [],
         duration: s.duration?.totalSeconds ?? 0,
         url: s.youtubeId,
@@ -212,5 +218,31 @@ export class YTScraper extends CacheHandler {
       if (i > 0) costs[s2.length] = lastValue
     }
     return costs[s2.length]
+  }
+
+  public async getWatchURL(id: string) {
+    const cache = this.getCache(`watchURL:${id}`)
+    if (cache) {
+      return cache
+    }
+
+    const data = await ytdl.getInfo(id)
+
+    let format
+    try {
+      format = ytdl.chooseFormat(data.formats, {
+        quality: 'highestaudio'
+      })
+    } catch (e) {
+      format = ytdl.chooseFormat(data.formats, {})
+    }
+
+    try {
+      const expiry = parseInt(new URL(format.url).searchParams.get('expire') ?? '0') * 1000
+      expiry > 0 && this.addToCache(`watchURL:${id}`, format.url, expiry)
+    } catch (e) {
+      console.warn('Failed to add watch URL to cache', format.url)
+    }
+    return format.url
   }
 }

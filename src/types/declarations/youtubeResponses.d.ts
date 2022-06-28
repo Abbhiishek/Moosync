@@ -22,19 +22,22 @@ declare namespace YoutubeResponses {
       part: ['id', 'snippet'?]
       relatedToVideoId?: string
       videoCategoryId?: 10
-      type?: 'video'
+      type?: 'video' | 'channel' | 'playlist'
       videoDuration?: 'short'
       maxResults?: number
       videoEmbeddable?: true
       order?: 'date' | 'relevance'
+      channelId?: string
       q?: string
+      pageToken?: string | undefined
     }
   }
 
   type ChannelRequest = {
     params: {
       part: ['id', 'snippet'?]
-      mine: true
+      mine?: true
+      id?: string
     }
   }
 
@@ -128,7 +131,7 @@ declare namespace YoutubeResponses {
     }
 
     interface Snippet {
-      publishedAt: Date
+      publishedAt: string
       channelId: string
       title: string
       description: string
@@ -165,7 +168,7 @@ declare namespace YoutubeResponses {
     }
 
     interface Snippet {
-      publishedAt: Date
+      publishedAt: string
       channelId: string
       title: string
       description: string
@@ -204,7 +207,7 @@ declare namespace YoutubeResponses {
     interface Snippet {
       title: string
       description: string
-      publishedAt: Date
+      publishedAt: string
       thumbnails: Thumbnails.Thumbnails
       localized: Localized
     }
@@ -249,7 +252,7 @@ declare namespace YoutubeResponses {
     }
 
     interface Snippet {
-      publishedAt: Date
+      publishedAt: string
       channelId: string
       title: string
       description: string
@@ -272,17 +275,23 @@ declare namespace YoutubeResponses {
   }
 
   namespace SearchDetails {
+    interface ChannelInfo extends ChannelInfo.Snippet {
+      channelId: string
+      channelTitle: string
+    }
     interface Item {
       id: {
         kind: string
-        videoId: string
+        videoId?: string
+        playlistId?: string
       }
       kind: string
       etag: string
-      snippet: VideoDetails.Snippet
+      snippet: VideoDetails.Snippet | ChannelInfo
     }
     interface SearchDetails {
       items: Item[]
+      nextPageToken: string
     }
   }
 

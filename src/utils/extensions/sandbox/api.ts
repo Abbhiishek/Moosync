@@ -11,8 +11,9 @@ import { extensionRequests } from '../constants'
 import crypto from 'crypto'
 
 export class ExtensionRequestGenerator implements ExtendedExtensionAPI {
-  private packageName: string
+  packageName: string
   player: PlayerControls
+  utils: Utils
 
   // eslint-disable-next-line @typescript-eslint/ban-types
   private eventCallbackMap: { [key: string]: Function } = {}
@@ -20,10 +21,15 @@ export class ExtensionRequestGenerator implements ExtendedExtensionAPI {
   private contextMenuMap: ExtendedExtensionContextMenuItems<ContextMenuTypes>[] = []
 
   private accountsMap: AccountDetails[] = []
+  private searchProvider: string | undefined
+  private artistSongProvider: string | undefined
+  private albumSongProvider: string | undefined
+  private playlistProvider: string | undefined
 
   constructor(packageName: string) {
     this.packageName = packageName
     this.player = new PlayerControls(this.packageName)
+    this.utils = new Utils(packageName)
   }
 
   public async getSongs(options: SongAPIOptions) {
@@ -75,7 +81,7 @@ export class ExtensionRequestGenerator implements ExtendedExtensionAPI {
   }
 
   public async addSongs(...songs: Song[]) {
-    return sendAsync<boolean[]>(this.packageName, 'add-songs', songs)
+    return sendAsync<(Song | undefined)[]>(this.packageName, 'add-songs', songs)
   }
 
   public async removeSong(song_id: string) {
@@ -149,6 +155,10 @@ export class ExtensionRequestGenerator implements ExtendedExtensionAPI {
   public on(eventName: string, callback: Function) {
     console.debug('Registering listener for', eventName, 'in package', this.packageName)
     this.eventCallbackMap[eventName] = callback
+
+    if (eventName === 'requestedPlaylists') {
+      this.registerPlaylistProvider()
+    }
     return callback
   }
 
@@ -209,6 +219,64 @@ export class ExtensionRequestGenerator implements ExtendedExtensionAPI {
 
   public _getAccountDetails(): AccountDetails[] {
     return this.accountsMap
+  }
+
+  public registerSearchProvider(title: string) {
+    this.searchProvider = title
+  }
+
+  public _getSearchProvider() {
+    return this.searchProvider
+  }
+
+  public registerArtistSongProvider(title: string) {
+    this.artistSongProvider = title
+  }
+
+  public _getArtistSongProvider() {
+    return this.artistSongProvider
+  }
+
+  public registerAlbumSongProvider(title: string) {
+    this.albumSongProvider = title
+  }
+
+  public _getAlbumSongProvider() {
+    return this.albumSongProvider
+  }
+
+  private registerPlaylistProvider() {
+    this.playlistProvider = this.packageName
+  }
+
+  public _getPlaylistProvider() {
+    return this.playlistProvider
+  }
+
+  public setArtistEditableInfo(artist_id: string, object: Record<string, string>) {
+    return sendAsync<void>(this.packageName, 'set-artist-editable-info', { artist_id, object })
+  }
+
+  public setAlbumEditableInfo(album_id: string, object: Record<string, string>) {
+    return sendAsync<void>(this.packageName, 'set-album-editable-info', { album_id, object })
+  }
+}
+
+class Utils implements utils {
+  private packageName: string
+
+  constructor(packageName: string) {
+    this.packageName = packageName
+  }
+
+  public getArtistExtraInfo(artist: Artists) {
+    if (artist?.artist_extra_info?.extensions)
+      return artist.artist_extra_info.extensions[this.packageName] as Record<string, string>
+  }
+
+  public getAlbumExtraInfo(album: Album) {
+    if (album?.album_extra_info?.extensions)
+      return album?.album_extra_info?.extensions[this.packageName] as Record<string, string>
   }
 }
 

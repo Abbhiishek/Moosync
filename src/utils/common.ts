@@ -34,15 +34,15 @@ export function getVersion(verS: string) {
   return 0
 }
 
-export function sortSongList(songList: Song[], options: SongSortOptions) {
-  songList.sort((a, b) => {
+export function sortSongList(songList: Song[], options: SongSortOptions): Song[] {
+  return songList.sort((a, b) => {
     const field: keyof Song = options.type as keyof Song
     const first = a[field]
     const second = b[field]
 
     if (first && second) {
       if (!options.asc) {
-        return first.toString().localeCompare(second.toString())
+        return second.toString().localeCompare(first.toString())
       } else {
         return first.toString().localeCompare(second.toString())
       }
@@ -170,4 +170,35 @@ export function sanitizeArtistName(name: string, capitalize = false) {
   }
 
   return sanitized
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function dotIndex(obj: any, is: string | string[], value?: unknown): unknown {
+  if (typeof is == 'string') return dotIndex(obj, is.split('.'), value)
+  else if (is.length == 1 && value !== undefined) return (obj[is[0]] = value)
+  else if (is.length == 0) return obj
+  else return dotIndex(obj[is[0]], is.slice(1), value)
+}
+
+function isObject(item: object): boolean {
+  return item && typeof item === 'object' && !Array.isArray(item)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mergeDeep(target: Record<string, unknown>, ...sources: any[]): Record<string, unknown> {
+  if (!sources.length) return target
+  const source = sources.shift()
+
+  if (isObject(target) && isObject(source)) {
+    for (const key in source) {
+      if (isObject(source[key])) {
+        if (!target[key]) Object.assign(target, { [key]: {} })
+        mergeDeep(target[key] as Record<string, unknown>, source[key])
+      } else {
+        Object.assign(target, { [key]: source[key] })
+      }
+    }
+  }
+
+  return mergeDeep(target, ...sources)
 }

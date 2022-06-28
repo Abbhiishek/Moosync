@@ -15,8 +15,15 @@
       enter-active-class="animate__animated animate__fadeIn"
       leave-active-class="animate__animated animate__fadeOut animate__faster"
     >
-      <b-img class="bg-img" v-if="computedImg" :src="computedImg" :key="computedImg"></b-img>
+      <b-img
+        class="bg-img"
+        v-if="computedImg"
+        :src="computedImg"
+        :key="computedImg"
+        referrerPolicy="no-referrer"
+      ></b-img>
     </transition>
+
     <b-container fluid class="w-100 h-100 main-container">
       <b-row no-gutters align-h="end">
         <b-col cols="auto">
@@ -30,7 +37,24 @@
             :forceWhiteText="true"
             :currentSong="currentSong"
             :forceCover="computedImg"
+            :isShowLyricsActive="showPlayer"
+            @toggleLyrics="onToggleLyrics"
           />
+          <div class="audioStream-slot" v-show="showPlayer === 2">
+            <b-container fluid class="scrollable">
+              <b-row no-gutters>
+                <b-col class="position-relative">
+                  <div class="video-container w-100">
+                    <div class="embed-responsive embed-responsive-1by1">
+                      <div class="embed-responsive-item">
+                        <slot></slot>
+                      </div>
+                    </div>
+                  </div>
+                </b-col>
+              </b-row>
+            </b-container>
+          </div>
         </b-col>
         <b-col offset="1" cols="7" class="right-container h-100">
           <div class="h-100" v-if="queueOrder.length > 0">
@@ -117,6 +141,10 @@ export default class MusicInfo extends mixins(ImageLoader, ModelHelper) {
     return vxm.sync.currentCover
   }
 
+  get showPlayer() {
+    return vxm.themes.showPlayer
+  }
+
   private close() {
     bus.$emit('onToggleSlider', false)
   }
@@ -156,28 +184,35 @@ export default class MusicInfo extends mixins(ImageLoader, ModelHelper) {
         data: [this.currentSong]
       })
 
-      return Object.values(resp).find((val) => !!val)
+      return resp && Object.values(resp).find((val) => !!val)
     }
+  }
+
+  @Watch('lyrics', { immediate: true })
+  onLyricsChange() {
+    bus.$emit(EventBus.REFRESH_LYRICS, this.lyrics)
   }
 
   @Watch('currentSong', { immediate: true })
   async onSongChange() {
     this.lyrics = ''
+
     if (this.currentSong) {
       if (this.currentSong.lyrics) {
         this.lyrics = this.currentSong.lyrics
       } else {
         this.lyrics = 'Searching Lyrics...'
+
+        const { _id, title, artists } = this.currentSong
         const resp =
           (await this.getLyricsFromExtension()) ??
-          (await window.SearchUtils.searchLyrics(
-            this.currentSong.artists?.map((val) => val.artist_name ?? '') ?? [],
-            this.currentSong.title
-          ))
+          (await window.SearchUtils.searchLyrics(artists?.map((val) => val.artist_name ?? '') ?? [], title))
 
-        this.currentSong.lyrics = resp
-        this.lyrics = resp || 'No lyrics found...'
-        window.DBUtils.updateLyrics(this.currentSong._id, resp)
+        if (this.currentSong._id === _id) {
+          this.currentSong.lyrics = resp
+          this.lyrics = resp || 'No lyrics found...'
+        }
+        window.DBUtils.updateLyrics(_id, resp)
       }
     }
   }
@@ -250,6 +285,10 @@ export default class MusicInfo extends mixins(ImageLoader, ModelHelper) {
   private currentSong!: Song | null
 
   private formattedDuration = convertDuration
+
+  private onToggleLyrics() {
+    vxm.themes.showPlayer = vxm.themes.showPlayer === 1 ? 2 : 1
+  }
 }
 </script>
 
@@ -342,4 +381,15 @@ export default class MusicInfo extends mixins(ImageLoader, ModelHelper) {
 .cross-icon
   width: 18px
   margin-right: 1.5rem
+
+.audioStream-slot
+  position: absolute
+  left: 0
+  top: 0
+  width: 100%
+  padding-right: 25px
+
+.video-container
+  position: relative
+  text-shadow: 0 0 white
 </style>

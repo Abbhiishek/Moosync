@@ -13,7 +13,7 @@
     <title>Moosync</title>
     <authors>Sahil Gupte</authors>
     <projectUrl>https://moosync.app</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/Moosync/Moosync/main/build/icons/icon.png</iconUrl>
+    <iconUrl>https://rawcdn.githack.com/Moosync/Moosync/8dbce2217f2df7ac3007698ffbc3006613ddbae8/build/icons/icon.png</iconUrl>
     <licenseUrl>https://www.gnu.org/licenses/gpl-3.0.md</licenseUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <projectSourceUrl>https://github.com/Moosync/Moosync</projectSourceUrl>

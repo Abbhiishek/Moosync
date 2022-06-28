@@ -10,7 +10,7 @@
 import { Observable, SubscriptionObserver } from 'observable-fns'
 import { expose } from 'threads/worker'
 
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 import axiosRetry from 'axios-retry'
 import { createHash } from 'crypto'
 import fs from 'fs'
@@ -45,7 +45,7 @@ const musicbrainz = rateLimit(
   axios.create({
     baseURL: 'https://musicbrainz.org/ws/2/artist/',
     headers: { 'User-Agent': 'moosync/' + process.env.MOOSYNC_VERSION.toString() + ' (ovenoboyo@gmail.com)' },
-    timeout: 3000
+    timeout: 5000
   }),
   {
     maxRequests: 1,
@@ -61,16 +61,18 @@ axiosRetry(axios, {
 })
 
 async function queryMbid(name: string) {
-  return musicbrainz.get(
-    encodeURI(`/?limit=1&query=artist:${sanitizeArtistName(name).replaceAll(' ', '%20').replaceAll('.', '')}`)
-  )
+  return musicbrainz.get(`/?limit=1&query=artist:${sanitizeArtistName(name)}`)
 }
 
 async function getAndUpdateMBID(a: Artists): Promise<Artists | undefined> {
   if (a.artist_name) {
-    const data = await queryMbid(a.artist_name)
-    if (data.data && data.data.artists.length > 0 && data.data.artists[0].id) {
-      return { artist_id: a.artist_id, artist_mbid: data.data.artists[0].id, artist_name: a.artist_name }
+    try {
+      const data = await queryMbid(a.artist_name)
+      if (data.data && data.data.artists.length > 0 && data.data.artists[0].id) {
+        return { artist_id: a.artist_id, artist_mbid: data.data.artists[0].id, artist_name: a.artist_name }
+      }
+    } catch (e) {
+      console.debug('Failed to fetch artist mbid for', a.artist_name, (e as AxiosError).response?.status)
     }
   }
 }
@@ -83,6 +85,8 @@ export async function fetchMBID(artists: Artists[], observer: SubscriptionObserv
       const updated = await getAndUpdateMBID(a)
       logger.debug('Got MBID for', a.artist_name, 'as', updated?.artist_mbid)
       observer.next(updated)
+    } else {
+      observer.next(a)
     }
   }
   logger.debug('Finished fetching MBID')
@@ -148,7 +152,7 @@ async function fetchTheAudioDB(artist_name: string) {
       }
     }
   } catch (e) {
-    logger.debug('TheAudioDB fetch failed', e)
+    logger.debug('TheAudioDB fetch failed', (e as AxiosError).response?.status)
   }
 }
 
@@ -168,9 +172,7 @@ async function fetchFanartTv(mbid: string): Promise<string | undefined> {
 async function followWikimediaRedirects(fileName: string): Promise<string | undefined> {
   try {
     const data = (
-      await axios.get(
-        encodeURI(`https://commons.wikimedia.org/w/api.php?action=query&redirects=1&titles=${fileName}&format=json`)
-      )
+      await axios.get(`https://commons.wikimedia.org/w/api.php?action=query&redirects=1&titles=${fileName}&format=json`)
     ).data.query
     let filename = ''
     for (const i in data.pages) {
@@ -216,7 +218,6 @@ async function checkCoverExists(coverPath: string | undefined): Promise<boolean>
       return true
     } catch (e) {
       logger.warn(`${coverPath} not accessible`)
-      return false
     }
   }
   return false
@@ -242,6 +243,6 @@ export async function fetchArtworks(
       }
     }
   }
-  logger.debug('Finished fetching artworks')
+  logger.debug('Finished fetching artworks for', artists)
   observer.complete()
 }

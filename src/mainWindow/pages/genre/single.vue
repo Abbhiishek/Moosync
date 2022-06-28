@@ -53,7 +53,7 @@ export default class SingleAlbumView extends mixins(ContextMenuMixin) {
   get defaultDetails(): SongDetailDefaults {
     return {
       defaultTitle: this.genre?.genre_name,
-      defaultSubSubtitle: `${this.genre?.genre_song_count} Songs`
+      defaultSubSubtitle: `${this.songList.length} Songs`
     }
   }
 
@@ -81,17 +81,12 @@ export default class SingleAlbumView extends mixins(ContextMenuMixin) {
     })
   }
 
-  private sort(options: SongSortOptions) {
-    vxm.themes.songSortBy = options
-  }
-
   private getSongMenu(event: Event, songs: Song[], exclude: string | undefined) {
     this.getContextMenu(event, {
       type: 'SONGS',
       args: {
         songs: songs,
         exclude: exclude,
-        sortOptions: { callback: this.sort, current: vxm.themes.songSortBy },
         refreshCallback: () => (this.songList = arrayDiff(this.songList, songs))
       }
     })

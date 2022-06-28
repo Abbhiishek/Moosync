@@ -40,6 +40,7 @@ export enum SearchEvents {
   SEARCH_ALL = 'searchAll',
   SEARCH_YT = 'searchYT',
   YT_SUGGESTIONS = 'YTSuggestions',
+  GET_YT_AUDIO_URL = 'getYTAudioURL',
   SCRAPE_LASTFM = 'scrapeLastFM',
   SCRAPE_LYRICS = 'scrapeLyrics',
   REQUEST_INVIDIOUS = 'requestInvidious'
@@ -174,7 +175,11 @@ export enum ExtensionHostEvents {
   ON_ACCOUNT_REGISTERED = 'onAccountRegistered',
   GET_REGISTERED_ACCOUNTS = 'getRegisteredAccounts',
   PERFORM_ACCOUNT_LOGIN = 'performAccountLogin',
-  ON_EXTENSIONS_CHANGED = 'onExtensionsChanged'
+  ON_EXTENSIONS_CHANGED = 'onExtensionsChanged',
+  GET_REGISTERED_SEARCH_PROVIDERS = 'getRegisteredSearchProviders',
+  GET_REGISTERED_ARTIST_SONG_PROVIDERS = 'getRegisteredArtistSongProviders',
+  GET_REGISTERED_PLAYLIST_PROVIDERS = 'getRegisteredPlaylistProviders',
+  GET_REGISTERED_ALBUM_SONG_PROVIDERS = 'getRegisteredAlbumSongProviders'
 }
 
 export enum ServiceProviderEvents {
@@ -203,5 +208,6 @@ export enum EventBus {
   HIDE_OAUTH_MODAL = 'hide-oauth-modal',
   SHOW_FORM_MODAL = 'show-form-modal',
   REFRESH_USERNAMES = 'refresh-usernames',
-  REFRESH_PAGE = 'refresh-page'
+  REFRESH_PAGE = 'refresh-page',
+  REFRESH_LYRICS = 'refresh-lyrics'
 }

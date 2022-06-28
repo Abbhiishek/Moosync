@@ -19,6 +19,7 @@
       "Brainz",
       "browserslist",
       "bufferutil",
+      "Coverpath",
       "deepmerge",
       "Dets",
       "deviceno",
@@ -27,6 +28,7 @@
       "Errored",
       "Fanart",
       "Fragmenter",
+      "gapless",
       "Gbps",
       "Gupte",
       "highres",
@@ -46,9 +48,12 @@
       "maxres",
       "MBID",
       "Mbps",
+      "mergable",
       "minimizable",
+      "miniplayer",
       "minisong",
       "mixins",
+      "Moosync",
       "musicbar",
       "Musicbrainz",
       "musicmetadata",
@@ -67,16 +72,21 @@
       "rels",
       "Rescan",
       "respawn",
+      "respawned",
       "Sahil",
       "scrobble",
       "Scrobbler",
       "scrobblers",
+      "seekbackward",
+      "seekforward",
       "seekto",
       "Serializable",
       "shvl",
+      "signin",
       "Signout",
       "snapcraft",
       "songid",
+      "Songlist",
       "spectron",
       "Spotify",
       "SPOTIFYCLIENTID",
@@ -104,7 +114,7 @@
     ],
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
-    "typescript.tsdk": "node_modules\\typescript\\lib",
+    "typescript.tsdk": "node_modules/typescript/lib",
     "[vue]": {
       "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
@@ -125,16 +135,5 @@
         "commentEnd": "-->"
       }
     ],
-  },
-  "extensions": {
-    "recommendations": [
-      "dbaeumer.vscode-eslint",
-      "digitalbrainstem.ejs-vue",
-      "waderyan.nodejs-extension-pack",
-      "octref.vetur",
-      "lauren.vue-pack",
-      "ms-vscode.vscode-typescript-next",
-      "rbbit.typescript-hero"
-    ]
   }
 }

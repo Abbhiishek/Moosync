@@ -58,6 +58,18 @@ export class ExtensionHostChannel implements IpcChannelInterface {
       case ExtensionHostEvents.PERFORM_ACCOUNT_LOGIN:
         this.performAccountLogin(event, request as IpcRequest<ExtensionHostRequests.AccountLogin>)
         break
+      case ExtensionHostEvents.GET_REGISTERED_SEARCH_PROVIDERS:
+        this.getRegisteredSearchProviders(event, request)
+        break
+      case ExtensionHostEvents.GET_REGISTERED_ARTIST_SONG_PROVIDERS:
+        this.getRegisteredArtistSongProviders(event, request)
+        break
+      case ExtensionHostEvents.GET_REGISTERED_PLAYLIST_PROVIDERS:
+        this.getRegisteredPlaylistProviders(event, request)
+        break
+      case ExtensionHostEvents.GET_REGISTERED_ALBUM_SONG_PROVIDERS:
+        this.getRegisteredAlbumSongProviders(event, request)
+        break
     }
   }
 
@@ -255,5 +267,25 @@ export class ExtensionHostChannel implements IpcChannelInterface {
       )
       event.reply(request.responseChannel)
     }
+  }
+
+  public async getRegisteredSearchProviders(event: Electron.IpcMainEvent, request: IpcRequest) {
+    const items = await this.extensionHost.mainRequestGenerator.getSearchProviders()
+    event.reply(request.responseChannel, items)
+  }
+
+  public async getRegisteredArtistSongProviders(event: Electron.IpcMainEvent, request: IpcRequest) {
+    const items = await this.extensionHost.mainRequestGenerator.getArtistSongProviders()
+    event.reply(request.responseChannel, items)
+  }
+
+  public async getRegisteredAlbumSongProviders(event: Electron.IpcMainEvent, request: IpcRequest) {
+    const items = await this.extensionHost.mainRequestGenerator.getAlbumSongProviders()
+    event.reply(request.responseChannel, items)
+  }
+
+  public async getRegisteredPlaylistProviders(event: Electron.IpcMainEvent, request: IpcRequest) {
+    const items = await this.extensionHost.mainRequestGenerator.getPlaylistProviders()
+    event.reply(request.responseChannel, items)
   }
 }

@@ -38,6 +38,8 @@ enum ApiResources {
   SEARCH = 'search',
   ARTIST_TOP = 'artists/{artist_id}/top-tracks',
   ARTIST_ALBUMS = 'artists/{artist_id}/albums',
+  ARTIST = 'artists/{artist_id}',
+  ALBUM = 'albums/{album_id}',
   ALBUM_SONGS = 'albums/{album_id}/tracks'
 }
 
@@ -47,6 +49,10 @@ enum ApiResources {
 export class SpotifyProvider extends GenericAuth implements GenericProvider, GenericRecommendation, GenericSearch {
   private auth!: AuthFlow
   private _config!: ReturnType<SpotifyProvider['getConfig']>
+
+  public get key() {
+    return 'spotify'
+  }
 
   private api = axios.create({
     adapter: cache.adapter,
@@ -148,11 +154,15 @@ export class SpotifyProvider extends GenericAuth implements GenericProvider, Gen
       search.params = undefined
     }
 
-    if (resource === ApiResources.ARTIST_TOP || resource === ApiResources.ARTIST_ALBUMS) {
+    if (
+      resource === ApiResources.ARTIST_TOP ||
+      resource === ApiResources.ARTIST_ALBUMS ||
+      resource === ApiResources.ARTIST
+    ) {
       url = resource.replace('{artist_id}', (search as SpotifyResponses.ArtistsTopTracks).params.id)
     }
 
-    if (resource === ApiResources.ALBUM_SONGS) {
+    if (resource === ApiResources.ALBUM_SONGS || resource === ApiResources.ALBUM) {
       url = resource.replace('{album_id}', (search as SpotifyResponses.AlbumTracksRequest).params.id)
     }
 
@@ -258,7 +268,15 @@ export class SpotifyProvider extends GenericAuth implements GenericProvider, Gen
       },
       url: track.id,
       song_coverPath_high: track.album.images[0] ? track.album.images[0].url : '',
-      artists: track.artists.map((artist) => ({ artist_name: artist.name, artist_id: `spotify-author:${artist.id}` })),
+      artists: track.artists.map((artist) => ({
+        artist_name: artist.name,
+        artist_id: `spotify-author:${artist.id}`,
+        artist_extra_info: {
+          spotify: {
+            artist_id: artist.id
+          }
+        }
+      })),
       duration: track.duration_ms / 1000,
       date_added: Date.now(),
       type: 'SPOTIFY'
@@ -401,7 +419,12 @@ export class SpotifyProvider extends GenericAuth implements GenericProvider, Gen
         title: track.name,
         artists: track.artists.map((val) => ({
           artist_id: `spotify-author:${val.id}`,
-          artist_name: val.name
+          artist_name: val.name,
+          artist_extra_info: {
+            spotify: {
+              artist_id: val.id
+            }
+          }
         })),
         album: {
           album_name: track.album.name,
@@ -418,7 +441,12 @@ export class SpotifyProvider extends GenericAuth implements GenericProvider, Gen
           song.artists.push({
             artist_id: `spotify-author:${artist.id}`,
             artist_name: artist.name,
-            artist_coverPath: artist.images?.at(0)?.url
+            artist_coverPath: artist.images?.at(0)?.url,
+            artist_extra_info: {
+              spotify: {
+                artist_id: artist.id
+              }
+            }
           })
         }
       }
@@ -518,7 +546,12 @@ export class SpotifyProvider extends GenericAuth implements GenericProvider, Gen
     return {
       artist_id: `spotify-author:${artist.id}`,
       artist_name: artist.name,
-      artist_coverPath: artist.images?.at(0)?.url
+      artist_coverPath: artist.images?.at(0)?.url,
+      artist_extra_info: {
+        spotify: {
+          artist_id: artist.id
+        }
+      }
     }
   }
 
@@ -554,7 +587,7 @@ export class SpotifyProvider extends GenericAuth implements GenericProvider, Gen
     return resp.items
   }
 
-  private async *getAlbumSongs(album: SpotifyResponses.RecommendationDetails.Album) {
+  private async *_getAlbumSongs(album: SpotifyResponses.RecommendationDetails.Album) {
     let nextOffset = 0
     let isNext = false
     const limit = 50
@@ -583,22 +616,150 @@ export class SpotifyProvider extends GenericAuth implements GenericProvider, Gen
     } while (isNext)
   }
 
-  public async *getArtistSongs(artist_id: string): AsyncGenerator<Song[]> {
-    artist_id = artist_id.replace('spotify-author:', '')
-    const resp = await this.populateRequest(ApiResources.ARTIST_TOP, {
+  private async correctArtist(artist: Artists) {
+    if (artist.artist_name) {
+      const sanitizedName = artist.artist_name
+        .toLowerCase()
+        .replaceAll(/vevo|official|videos|topic|music|youtube|-|,|/g, '')
+
+      const resp = await this.searchArtists(sanitizedName)
+      if (resp.length > 0) {
+        window.DBUtils.updateArtist({
+          artist_id: artist.artist_id,
+          artist_coverPath: artist.artist_coverPath ?? resp[0].artist_coverPath,
+          artist_extra_info: {
+            spotify: resp[0].artist_extra_info?.spotify
+          }
+        })
+        return resp[0]
+      }
+    }
+  }
+
+  public async *getArtistSongs(artist: Artists): AsyncGenerator<Song[]> {
+    let artist_id = artist.artist_extra_info?.spotify?.artist_id
+
+    if (!artist_id && artist.artist_name) {
+      const resp = await this.correctArtist(artist)
+      if (resp) {
+        artist_id = resp.artist_extra_info?.spotify?.artist_id
+      }
+    }
+
+    if (artist_id) {
+      const resp = await this.populateRequest(ApiResources.ARTIST_TOP, {
+        params: {
+          id: artist_id,
+          market: 'ES'
+        }
+      })
+
+      for (const s of resp.tracks) {
+        yield [this.parseSong(s)]
+      }
+
+      const albums = await this.getArtistAlbums(artist_id)
+      for (const a of albums) {
+        for await (const s of this._getAlbumSongs(a)) yield [s]
+      }
+    }
+  }
+
+  public async getArtistDetails(artist: Artists, forceFetch = false) {
+    if (artist.artist_extra_info?.spotify?.artist_id) {
+      const artistDetails = await this.populateRequest(ApiResources.ARTIST, {
+        params: {
+          id: artist.artist_extra_info?.spotify?.artist_id,
+          market: 'ES'
+        }
+      })
+
+      return this.parseArtist(artistDetails)
+    }
+
+    if (forceFetch && artist.artist_name) {
+      const artistDetails = await this.searchArtists(artist.artist_name)
+      if (artistDetails.length > 0) {
+        return artistDetails[0]
+      }
+    }
+  }
+
+  public async searchPlaylists(term: string): Promise<Playlist[]> {
+    const playlists: ExtendedPlaylist[] = []
+    const resp = await this.populateRequest(ApiResources.SEARCH, {
       params: {
-        id: artist_id,
-        market: 'ES'
+        query: term,
+        type: 'playlist',
+        limit: 20
       }
     })
 
-    for (const s of resp.tracks) {
-      yield [this.parseSong(s)]
+    if (resp.playlists) {
+      playlists.push(...this.parsePlaylists(resp.playlists.items))
     }
 
-    const albums = await this.getArtistAlbums(artist_id)
-    for (const a of albums) {
-      for await (const s of this.getAlbumSongs(a)) yield [s]
+    return playlists
+  }
+
+  private parseAlbum(...items: SpotifyResponses.RecommendationDetails.Album[]) {
+    const albums: Album[] = []
+
+    for (const a of items) {
+      albums.push({
+        album_id: `spotify-album:${a.id}`,
+        album_name: a.name,
+        album_song_count: a.total_tracks,
+        album_coverPath_high: a.images[0] ? a.images[0].url : '',
+        album_coverPath_low: a.images[2] ? a.images[2].url : '',
+        album_extra_info: {
+          spotify: {
+            album_id: a.id
+          }
+        }
+      })
+    }
+
+    return albums
+  }
+
+  public async searchAlbum(term: string): Promise<Album[]> {
+    const albums: Album[] = []
+    const resp = await this.populateRequest(ApiResources.SEARCH, {
+      params: {
+        query: term,
+        type: 'album',
+        limit: 20
+      }
+    })
+
+    if (resp.albums) {
+      albums.push(...this.parseAlbum(...resp.albums.items))
+    }
+
+    return albums
+  }
+
+  public async *getAlbumSongs(album: Album) {
+    if (album.album_name) {
+      let albumId = album.album_extra_info?.spotify?.album_id
+
+      if (!albumId) {
+        albumId = (await this.searchAlbum(album.album_name))[0]?.album_extra_info?.spotify?.album_id
+      }
+
+      if (albumId) {
+        const albumDets = await this.populateRequest(ApiResources.ALBUM, {
+          params: {
+            id: albumId,
+            market: 'ES'
+          }
+        })
+
+        for await (const s of this._getAlbumSongs(albumDets)) {
+          yield s
+        }
+      }
     }
   }
 }

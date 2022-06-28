@@ -19,6 +19,8 @@ import pie from 'puppeteer-in-electron'
 import puppeteer from 'puppeteer-core'
 import { getExtensionHostChannel } from './ipc'
 import { SongDB } from './db/index'
+import https from 'https'
+import { Readable } from 'stream'
 
 export class WindowHandler {
   private static mainWindow: number
@@ -70,8 +72,8 @@ export class WindowHandler {
     return {
       title: 'Moosync',
       ...getWindowSize('mainWindow', { width: 1016, height: 653 }),
-      minHeight: 653,
-      minWidth: 1016,
+      minHeight: 400,
+      minWidth: 300,
       ...this.baseWindowProps
     }
   }
@@ -131,7 +133,7 @@ export class WindowHandler {
   }
 
   public registerExtensionProtocol() {
-    protocol.registerBufferProtocol('extension', async (request, callback) => {
+    protocol.registerStreamProtocol('extension', async (request, callback) => {
       const extensionPackageName = new URL(request.url).hostname
       if (extensionPackageName) {
         const extensionHost = getExtensionHostChannel()
@@ -142,14 +144,25 @@ export class WindowHandler {
         })
 
         if (data[extensionPackageName]) {
-          callback({
-            mimeType: (data[extensionPackageName] as CustomRequestReturnType).mimeType,
-            data: Buffer.from((data[extensionPackageName] as CustomRequestReturnType).data)
-          })
-          return
+          const redirectUrl = (data[extensionPackageName] as CustomRequestReturnType).redirectUrl
+          if (redirectUrl) {
+            https.get(redirectUrl, callback)
+            return
+          }
+
+          const respData = (data[extensionPackageName] as CustomRequestReturnType).data
+          const mimeType = (data[extensionPackageName] as CustomRequestReturnType).mimeType
+          if (respData && mimeType) {
+            callback({
+              statusCode: 200,
+              headers: {
+                'content-type': mimeType
+              },
+              data: Readable.from(Buffer.from(respData))
+            })
+          }
         }
       }
-      callback({ data: Buffer.from('') })
     })
   }
 
@@ -260,6 +273,14 @@ export class WindowHandler {
     window.on('show', () => {
       this.handleWindowShow(window)
     })
+
+    // TODO: Hopefully expand the blocklist in future
+    window.webContents.session.webRequest.onBeforeRequest(
+      { urls: ['*://googleads.g.doubleclick.net/*', '*://*.youtube.com/api/stats/ads'] },
+      (details, callback) => {
+        callback({ cancel: true })
+      }
+    )
   }
 
   public minimizeWindow(isMainWindow = true) {

@@ -10,9 +10,11 @@
 import { Player } from './player'
 
 export class LocalPlayer extends Player {
-  playerInstance: HTMLAudioElement
+  playerInstance: CustomAudioInstance
+  private track: MediaElementAudioSourceNode | undefined
+  private context: AudioContext | undefined
 
-  constructor(playerInstance: HTMLAudioElement) {
+  constructor(playerInstance: CustomAudioInstance) {
     super()
     this.playerInstance = playerInstance
     this.playerInstance.load()
@@ -26,11 +28,11 @@ export class LocalPlayer extends Player {
   }
 
   async play(): Promise<void> {
-    if (this.playerInstance.paused) await this.playerInstance.play()
+    if (this.playerInstance.paused) await this.playerInstance?.play()
   }
 
   pause(): void {
-    if (!this.playerInstance.paused) this.playerInstance.pause()
+    if (!this.playerInstance.paused) this.playerInstance?.pause()
   }
 
   stop(): void {
@@ -56,11 +58,11 @@ export class LocalPlayer extends Player {
   }
 
   protected listenOnEnded(callback: () => void): void {
-    this.playerInstance.addEventListener('ended', callback)
+    this.playerInstance.onended = callback
   }
 
   protected listenOnTimeUpdate(callback: (time: number) => void): void {
-    this.playerInstance.ontimeupdate = (e) => callback((e.currentTarget as HTMLAudioElement).currentTime)
+    this.playerInstance.ontimeupdate = () => callback(this.currentTime)
   }
 
   protected listenOnLoad(callback: () => void): void {
@@ -89,7 +91,7 @@ export class LocalPlayer extends Player {
   }
 
   protected listenOnBuffer(callback: () => void): void {
-    this.playerInstance.onloadstart = () => callback
+    this.playerInstance.onloadstart = callback
   }
 
   removeAllListeners(): void {
@@ -97,6 +99,37 @@ export class LocalPlayer extends Player {
     this.playerInstance.ontimeupdate = null
     for (const [key, value] of Object.entries(this.listeners)) {
       this.playerInstance.removeEventListener(key as keyof HTMLMediaElementEventMap, value)
+    }
+  }
+
+  createAudioContext() {
+    if (!this.context && this.playerInstance instanceof HTMLAudioElement) {
+      this.context = new AudioContext()
+      this.track = this.context.createMediaElementSource(this.playerInstance)
+      this.track.connect(this.context.destination)
+    }
+
+    return this.context
+  }
+
+  connectAudioContextNode(node: AudioNode): void {
+    if (this.context && this.track) {
+      this.track.connect(node).connect(this.context.destination)
+    }
+  }
+
+  // Hoping electron will cache the audio
+  preload(src: string) {
+    try {
+      new URL(src)
+      const audio = new Audio()
+      audio.preload = 'auto'
+      audio.volume = 0
+      audio.src = src
+      audio.load()
+      audio.play()
+    } catch (e) {
+      console.debug('Not a valid URL, not preloading')
     }
   }
 }

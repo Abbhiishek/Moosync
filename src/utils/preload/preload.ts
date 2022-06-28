@@ -139,8 +139,11 @@ contextBridge.exposeInMainWorld('Store', {
 })
 
 contextBridge.exposeInMainWorld('FileUtils', {
-  scan: () =>
-    ipcRendererHolder.send<undefined>(IpcEvents.SCANNER, { type: ScannerEvents.SCAN_MUSIC, params: undefined }),
+  scan: (forceScan = false) =>
+    ipcRendererHolder.send<ScannerRequests.ScanSongs>(IpcEvents.SCANNER, {
+      type: ScannerEvents.SCAN_MUSIC,
+      params: { forceScan }
+    }),
 
   getScanProgress: () =>
     ipcRendererHolder.send<void>(IpcEvents.SCANNER, { type: ScannerEvents.GET_PROGRESS, params: undefined }),
@@ -195,7 +198,7 @@ contextBridge.exposeInMainWorld('SearchUtils', {
       params: { options }
     }),
 
-  searchEntityByOptions: (options: EntityApiOptions) =>
+  searchEntityByOptions: <T extends Artists | Album | Genre | Playlist>(options: EntityApiOptions<T>) =>
     ipcRendererHolder.send<SearchRequests.EntityOptions>(IpcEvents.SEARCH, {
       type: SearchEvents.SEARCH_ENTITY_BY_OPTIONS,
       params: { options }
@@ -216,6 +219,12 @@ contextBridge.exposeInMainWorld('SearchUtils', {
   getYTSuggestions: (videoID: string) =>
     ipcRendererHolder.send<SearchRequests.YTSuggestions>(IpcEvents.SEARCH, {
       type: SearchEvents.YT_SUGGESTIONS,
+      params: { videoID }
+    }),
+
+  getYTAudioURL: (videoID: string) =>
+    ipcRendererHolder.send<SearchRequests.YTSuggestions>(IpcEvents.SEARCH, {
+      type: SearchEvents.GET_YT_AUDIO_URL,
       params: { videoID }
     }),
 
@@ -521,7 +530,31 @@ contextBridge.exposeInMainWorld('ExtensionUtils', {
     }),
 
   listenExtensionsChanged: (callback: () => void) =>
-    ipcRendererHolder.on(ExtensionHostEvents.ON_EXTENSIONS_CHANGED, callback)
+    ipcRendererHolder.on(ExtensionHostEvents.ON_EXTENSIONS_CHANGED, callback),
+
+  getRegisteredSearchProviders: () =>
+    ipcRendererHolder.send(IpcEvents.EXTENSION_HOST, {
+      type: ExtensionHostEvents.GET_REGISTERED_SEARCH_PROVIDERS,
+      params: undefined
+    }),
+
+  getRegisteredArtistSongProviders: () =>
+    ipcRendererHolder.send(IpcEvents.EXTENSION_HOST, {
+      type: ExtensionHostEvents.GET_REGISTERED_ARTIST_SONG_PROVIDERS,
+      params: undefined
+    }),
+
+  getRegisteredAlbumSongProviders: () =>
+    ipcRendererHolder.send(IpcEvents.EXTENSION_HOST, {
+      type: ExtensionHostEvents.GET_REGISTERED_ALBUM_SONG_PROVIDERS,
+      params: undefined
+    }),
+
+  getRegisteredPlaylistProviders: () =>
+    ipcRendererHolder.send(IpcEvents.EXTENSION_HOST, {
+      type: ExtensionHostEvents.GET_REGISTERED_PLAYLIST_PROVIDERS,
+      params: undefined
+    })
 })
 
 contextBridge.exposeInMainWorld('UpdateUtils', {

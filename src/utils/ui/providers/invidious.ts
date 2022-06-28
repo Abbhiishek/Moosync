@@ -22,6 +22,10 @@ export class InvidiousProvider extends GenericAuth implements GenericProvider, G
   private _token: string | undefined
   private oAuthChannel: string | undefined
 
+  public get key() {
+    return 'youtube'
+  }
+
   public async updateConfig(): Promise<boolean> {
     const AUTH_BASE_URL = await window.PreferenceUtils.loadSelective('invidious_instance')
     this._token = (await this.fetchStoredToken()) ?? undefined
@@ -233,6 +237,23 @@ export class InvidiousProvider extends GenericAuth implements GenericProvider, G
     })
 
     if (resp) return this.parsePlaylistItems([resp])
+    return []
+  }
+
+  // TODO: Fetch artist details from invidious
+  public async getArtistDetails(artist: Artists): Promise<Artists | undefined> {
+    return
+  }
+
+  public async searchArtists(term: string): Promise<Artists[]> {
+    return []
+  }
+
+  public async searchPlaylists(term: string): Promise<Playlist[]> {
+    return []
+  }
+
+  public async searchAlbum(term: string): Promise<Album[]> {
     return []
   }
 }

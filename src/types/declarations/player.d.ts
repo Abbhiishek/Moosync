@@ -11,8 +11,8 @@ type AudioType = 'STREAMING' | 'LOCAL'
 
 type PlayerState = 'PLAYING' | 'PAUSED' | 'STOPPED'
 interface SongQueue {
-  data: { [id: string]: Song }
-  order: { id: string; songID: string }[]
+  data: QueueData<Song>
+  order: QueueOrder
   index: number
 }
 
@@ -25,4 +25,27 @@ interface GenericQueue<T> {
   data: QueueData<T>
   order: QueueOrder
   index: number
+}
+
+interface CustomAudioInstance {
+  currentTime: number
+  volume: number
+  src: string
+  paused: boolean
+  srcObject: unknown
+
+  public load(): void
+  public pause(): void
+  public play(): Promise<void>
+
+  onended: ((this: GlobalEventHandlers, ev: Event) => void) | null
+  ontimeupdate: ((this: GlobalEventHandlers, ev: Event) => void) | null
+  onload: ((this: GlobalEventHandlers, ev: Event) => void) | null
+  onloadeddata: ((this: GlobalEventHandlers, ev: Event) => void) | null
+  onerror: OnErrorEventHandler
+  onloadstart: ((this: GlobalEventHandlers, ev: Event) => void) | null
+
+  removeAttribute(str: string): void
+  addEventListener(ev: string, callback: unknown)
+  removeEventListener(ev: string, callback: unknown)
 }

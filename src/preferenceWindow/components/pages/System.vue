@@ -22,6 +22,17 @@
             prefKey="system"
           />
 
+          <CheckboxGroup
+            title="Audio Settings"
+            class="mt-4"
+            tooltip="Settings which are related audio playback"
+            :isExtension="false"
+            :defaultValue="audioCheckboxValues"
+            :onValueChange="onAudioPrefChange"
+            :onValueFetch="onAudioPrefFetch"
+            prefKey="audio"
+          />
+
           <AutoFillEditText
             v-if="showInvidiousField"
             class="mt-4"
@@ -209,6 +220,27 @@ export default class System extends Vue {
   }
 
   private defaultSystemSettings: SystemSettings[] = []
+  private defaultAudioSettings: Checkbox[] = []
+
+  get audioCheckboxValues(): Checkbox[] {
+    return [
+      {
+        key: 'gapless_playback',
+        title: 'Use gapless playback for wherever possible',
+        enabled: false
+      },
+      {
+        key: 'sponsorblock',
+        title: 'Use SponsorBlock to automatically skip to highlighted part of Youtube song',
+        enabled: false
+      },
+      {
+        key: 'youtube_embeds',
+        title: 'Use Youtube embeds for playing audio from Youtube',
+        enabled: true
+      }
+    ]
+  }
 
   get systemCheckboxValues(): SystemSettings[] {
     return [
@@ -274,6 +306,18 @@ export default class System extends Vue {
 
   private closeModal() {
     this.$bvModal.hide('spotify-automate-modal')
+  }
+
+  private onAudioPrefFetch(value: SystemSettings[]) {
+    this.defaultAudioSettings = JSON.parse(JSON.stringify(value))
+  }
+
+  private onAudioPrefChange(value: Checkbox[]) {
+    for (let i = 0; i < value.length; i++) {
+      if (value[i].key === 'youtube_embeds') {
+        this.showRestartButton = this.defaultAudioSettings[i].enabled !== value[i].enabled
+      }
+    }
   }
 
   private onSystemPrefFetch(value: SystemSettings[]) {

@@ -62,10 +62,16 @@ type extensionUIRequestMessage = {
 
 type extensionReplyMessage = extensionRequestMessage
 
-type extensionHostMessage = extensionEventMessage | mainRequestMessage
+type extensionHostMessage = extensionEventMessage | mainRequestMessage | providerFetchRequestMessage
 
 type mainRequestMessage = {
   type: import('@/utils/extensions/constants').mainRequests
+  channel: string
+  data: any
+}
+
+type providerFetchRequestMessage = {
+  type: import('@/utils/extensions/constants').providerFetchRequests
   channel: string
   data: any
 }
@@ -118,6 +124,10 @@ interface ExtendedExtensionAPI extends extensionAPI {
   ) => Promise<ExtraExtensionEventReturnType<T> | undefined>
   _getContextMenuItems: () => ExtendedExtensionContextMenuItems<ContextMenuTypes>[]
   _getAccountDetails: () => AccountDetails[]
+  _getSearchProvider: () => string | undefined
+  _getArtistSongProvider: () => string | undefined
+  _getAlbumSongProvider: () => string | undefined
+  _getPlaylistProvider: () => string | undefined
 }
 
 interface ExtensionItem extends ExtensionDetails {

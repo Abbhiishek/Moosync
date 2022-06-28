@@ -10,22 +10,25 @@
 import path from 'path'
 import { Sharp, SharpOptions } from 'sharp'
 import { promises as fsP } from 'fs'
+import { v4 } from 'uuid'
 
 let sharpInstance: (input?: Buffer | string, options?: SharpOptions) => Sharp
 
 let importFailed = false
 
-export async function writeBuffer(bufferDesc: Buffer, basePath: string, id: string, onlyHigh = false) {
+export async function writeBuffer(bufferDesc: Buffer, basePath: string, onlyHigh = false) {
   if (!sharpInstance && !importFailed) {
     try {
       sharpInstance = (await import('sharp')).default
     } catch (e) {
       importFailed = true
       console.error(
-        'Failed to import sharp. Probably missing libvips-cpp.so. Read more at https://moosync.app/wiki/#known-bugs'
+        'Failed to import sharp. Probably missing libvips-cpp.so or libffi.so.7. Read more at https://moosync.app/wiki/#known-bugs'
       )
     }
   }
+
+  const id = v4()
 
   const highPath = path.join(basePath, id + '-high.jpg')
 

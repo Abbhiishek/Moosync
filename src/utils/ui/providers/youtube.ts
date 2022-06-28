@@ -35,6 +35,10 @@ export class YoutubeProvider extends GenericAuth implements GenericProvider, Gen
   private auth!: AuthFlow
   private _config!: ReturnType<YoutubeProvider['getConfig']>
 
+  public get key() {
+    return 'youtube'
+  }
+
   private getConfig(oauthChannel: string, id: string, secret: string) {
     return {
       openIdConnectUrl: 'https://accounts.google.com',
@@ -211,7 +215,7 @@ export class YoutubeProvider extends GenericAuth implements GenericProvider, Gen
   ): Promise<Song[]> {
     const songs: Song[] = []
     if (items.length > 0) {
-      const ids = items.map((s) => s.snippet?.resourceId.videoId) as string[]
+      const ids = items.map((s) => ({ id: s.snippet?.resourceId.videoId, date: s.snippet?.publishedAt }))
       const details = await this.getSongDetailsFromID(invalidateCache, ...ids)
       songs.push(...details)
     }
@@ -262,57 +266,73 @@ export class YoutubeProvider extends GenericAuth implements GenericProvider, Gen
     return
   }
 
-  private async parseVideo(items: YoutubeResponses.VideoDetails.Item[]) {
+  private async parseVideo(items: { item: YoutubeResponses.VideoDetails.Item; date?: string }[]) {
     const songs: Song[] = []
     for (const v of items) {
-      if (songs.findIndex((value) => value._id === v.id) === -1)
+      if (songs.findIndex((value) => value._id === v.item.id) === -1)
         songs.push({
-          _id: `youtube:${v.id}`,
-          title: v.snippet.title,
+          _id: `youtube:${v.item.id}`,
+          title: v.item.snippet.title,
           artists: [
             {
-              artist_id: `youtube-author:${v.snippet.channelId}`,
-              artist_name: v.snippet.channelTitle.replace('-', '').replace('Topic', '').trim()
+              artist_id: `youtube-author:${v.item.snippet.channelId}`,
+              artist_name: v.item.snippet.channelTitle.replace('-', '').replace('Topic', '').trim(),
+              artist_extra_info: {
+                youtube: {
+                  channel_id: v.item.snippet.channelId
+                }
+              }
             }
           ],
           song_coverPath_high: (
-            v.snippet.thumbnails.maxres ??
-            v.snippet.thumbnails.high ??
-            v.snippet.thumbnails.default
+            v.item.snippet.thumbnails.maxres ??
+            v.item.snippet.thumbnails.high ??
+            v.item.snippet.thumbnails.default
           ).url,
           song_coverPath_low: (
-            v.snippet.thumbnails.standard ??
-            v.snippet.thumbnails.standard ??
-            v.snippet.thumbnails.default
+            v.item.snippet.thumbnails.standard ??
+            v.item.snippet.thumbnails.standard ??
+            v.item.snippet.thumbnails.default
           ).url,
           album: {
             album_name: 'Misc'
           },
-          date: new Date(v.snippet.publishedAt).toISOString().slice(0, 10),
-          date_added: Date.now(),
-          duration: parseISO8601Duration(v.contentDetails.duration),
-          url: v.id,
+          date: new Date(v.item.snippet.publishedAt).toISOString().slice(0, 10),
+          date_added: Date.parse(v.date ?? ''),
+          duration: parseISO8601Duration(v.item.contentDetails.duration),
+          url: v.item.id,
           type: 'YOUTUBE'
         })
     }
     return songs
   }
 
-  private async getSongDetailsFromID(invalidateCache: boolean, ...id: string[]) {
+  private async getSongDetailsFromID(invalidateCache: boolean, ...songs: { id?: string; date?: string }[]) {
     const validRefreshToken = await this.auth?.hasValidRefreshToken()
     if (this.auth?.loggedIn() || validRefreshToken) {
+      const filtered = songs.filter((val) => !!val)
       const resp = await this.populateRequest(
         ApiResources.VIDEO_DETAILS,
         {
           params: {
             part: ['contentDetails', 'snippet'],
-            id: id,
+            id: filtered.map((val) => val.id) as string[],
             maxResults: 50
           }
         },
         invalidateCache
       )
-      return this.parseVideo(resp.items)
+
+      if (filtered.length !== resp.items.length) {
+        console.warn('Something went wrong while parsing song details. Length mismatch')
+      }
+
+      const items: Parameters<typeof this.parseVideo>[0] = []
+
+      for (let i = 0; i < resp.items.length; i++) {
+        items.push({ item: resp.items[i], date: filtered[i].date ?? resp.items[i].snippet.publishedAt })
+      }
+      return this.parseVideo(items)
     }
     return []
   }
@@ -353,9 +373,9 @@ export class YoutubeProvider extends GenericAuth implements GenericProvider, Gen
       }
     })
 
-    const finalIDs: string[] = []
+    const finalIDs: Parameters<typeof this.getSongDetailsFromID>[1][] = []
     if (resp.items) {
-      resp.items.forEach((val) => finalIDs.push(val.id.videoId))
+      resp.items.forEach((val) => finalIDs.push({ id: val.id.videoId, date: val.snippet.publishedAt }))
       songList.push(...(await this.getSongDetailsFromID(false, ...finalIDs)))
     }
 
@@ -372,7 +392,7 @@ export class YoutubeProvider extends GenericAuth implements GenericProvider, Gen
       const videoID = parsedUrl.searchParams.get('v')
 
       if (videoID) {
-        const details = await this.getSongDetailsFromID(invalidateCache, videoID)
+        const details = await this.getSongDetailsFromID(invalidateCache, { id: videoID })
         if (details && details.length > 0) {
           return details[0]
         }
@@ -394,7 +414,7 @@ export class YoutubeProvider extends GenericAuth implements GenericProvider, Gen
       }
     })
 
-    const resp: string[] = []
+    const resp: Parameters<typeof this.getSongDetailsFromID>[1][] = []
 
     let count = 0
     for (const song of youtubeSongs.slice(0, 10)) {
@@ -419,14 +439,166 @@ export class YoutubeProvider extends GenericAuth implements GenericProvider, Gen
               maxResults: 10 - resp.length
             }
           })
-        ).items.forEach((val) => resp.push(val.id.videoId))
+        ).items.forEach((val) => resp.push({ id: val.id.videoId, date: val.snippet.publishedAt }))
       }
 
       yield await this.getSongDetailsFromID(false, ...resp)
     }
   }
 
-  public async *getArtistSongs(): AsyncGenerator<Song[]> {
-    yield []
+  public async *getArtistSongs(artist: Artists): AsyncGenerator<Song[]> {
+    const channelId = artist.artist_extra_info?.youtube?.channel_id
+    const finalIDs: Parameters<typeof this.getSongDetailsFromID>[1][] = []
+
+    if (channelId) {
+      let pageToken: string | undefined
+
+      do {
+        const resp = await this.populateRequest(ApiResources.SEARCH, {
+          params: {
+            part: ['id', 'snippet'],
+            type: 'video',
+            maxResults: 50,
+            order: 'relevance',
+            videoEmbeddable: true,
+            pageToken,
+            channelId
+          }
+        })
+
+        if (resp.items) {
+          resp.items.forEach((val) => finalIDs.push({ id: val.id.videoId, date: val.snippet?.publishedAt }))
+        }
+
+        pageToken = resp.nextPageToken
+      } while (pageToken)
+
+      while (finalIDs.length > 0) {
+        yield this.getSongDetailsFromID(false, ...finalIDs.splice(0, 50))
+      }
+    } else {
+      const resp = await this.populateRequest(ApiResources.SEARCH, {
+        params: {
+          part: ['id', 'snippet'],
+          type: 'video',
+          maxResults: 50,
+          order: 'relevance',
+          videoEmbeddable: true,
+          q: `${artist.artist_name} music`
+        }
+      })
+
+      if (resp.items) {
+        resp.items.forEach((val) => finalIDs.push({ id: val.id.videoId, date: val.snippet?.publishedAt }))
+        yield this.getSongDetailsFromID(false, ...finalIDs)
+      }
+    }
+  }
+
+  private parseArtist(artist: YoutubeResponses.ChannelInfo.ChannelInfo): Artists | undefined {
+    if (artist.items.length > 0) {
+      return {
+        artist_id: `youtube-author:${artist.items[0].id}`,
+        artist_coverPath:
+          artist.items[0].snippet?.thumbnails?.maxres?.url ??
+          artist.items[0].snippet?.thumbnails?.high?.url ??
+          artist.items[0].snippet?.thumbnails?.default?.url,
+        artist_extra_info: {
+          youtube: {
+            channel_id: artist.items[0].id
+          }
+        },
+        artist_name: artist.items[0].snippet?.title
+      }
+    }
+  }
+
+  public async getArtistDetails(artist: Artists, forceFetch = false) {
+    if (artist.artist_extra_info?.youtube?.channel_id) {
+      const artistDetails = await this.populateRequest(ApiResources.CHANNELS, {
+        params: {
+          id: artist.artist_extra_info?.youtube?.channel_id,
+          part: ['id', 'snippet']
+        }
+      })
+
+      return this.parseArtist(artistDetails)
+    }
+  }
+
+  private parseSearchArtist(...items: YoutubeResponses.SearchDetails.Item[]) {
+    const artists: Artists[] = []
+
+    for (const i of items) {
+      artists.push({
+        artist_id: `youtube-author:${i.snippet.channelId}`,
+        artist_name: i.snippet.channelTitle,
+        artist_coverPath: (i.snippet.thumbnails.maxres ?? i.snippet.thumbnails.high ?? i.snippet.thumbnails.default)
+          .url,
+        artist_extra_info: {
+          youtube: {
+            channel_id: i.snippet.channelId
+          }
+        }
+      })
+    }
+
+    return artists
+  }
+
+  public async searchArtists(term: string): Promise<Artists[]> {
+    const artists: Artists[] = []
+
+    const resp = await this.populateRequest(ApiResources.SEARCH, {
+      params: {
+        part: ['id', 'snippet'],
+        type: 'channel',
+        maxResults: 50,
+        order: 'relevance',
+        q: term
+      }
+    })
+
+    artists.push(...this.parseSearchArtist(...resp.items))
+
+    return artists
+  }
+
+  private parseSearchPlaylists(...items: YoutubeResponses.SearchDetails.Item[]) {
+    const playlists: Playlist[] = []
+
+    for (const i of items) {
+      playlists.push({
+        playlist_id: `youtube-playlist:${i.id.playlistId}`,
+        playlist_name: i.snippet.title,
+        playlist_coverPath: (i.snippet.thumbnails.maxres ?? i.snippet.thumbnails.high ?? i.snippet.thumbnails.default)
+          .url,
+        playlist_desc: i.snippet.description
+      })
+    }
+
+    return playlists
+  }
+
+  public async searchPlaylists(term: string): Promise<Playlist[]> {
+    const playlists: Playlist[] = []
+
+    const resp = await this.populateRequest(ApiResources.SEARCH, {
+      params: {
+        part: ['id', 'snippet'],
+        type: 'playlist',
+        maxResults: 50,
+        order: 'relevance',
+        q: term
+      }
+    })
+
+    playlists.push(...this.parseSearchPlaylists(...resp.items))
+
+    return playlists
+  }
+
+  public async searchAlbum(term: string): Promise<Album[]> {
+    return []
   }
 }

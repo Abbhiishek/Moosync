@@ -21,7 +21,7 @@ interface DBUtils {
    * Store songs in database
    * @param songs array of songs to remove
    */
-  storeSongs: (songs: Song[]) => Promise<void>
+  storeSongs: (songs: Song[]) => Promise<(Song | undefined)[]>
 
   /**
    * Update songs in database
@@ -71,7 +71,7 @@ interface searchUtils {
   /**
    * Search entities like album, artists, playlists, genre by options
    */
-  searchEntityByOptions: <T>(options: EntityApiOptions) => Promise<T[]>
+  searchEntityByOptions: <T extends Artists | Album | Genre | Playlist>(options: EntityApiOptions<T>) => Promise<T[]>
 
   /**
    * Search all by a term
@@ -98,6 +98,11 @@ interface searchUtils {
   getYTSuggestions: (videoID: string) => Promise<Song[]>
 
   /**
+   * Get direct stream URL from youtube
+   */
+  getYTAudioURL: (videoID: string) => Promise<string>
+
+  /**
    * Scrape a webpage and parse it to json
    */
   scrapeLastFM: (url: string) => Promise<unknown>
@@ -120,7 +125,7 @@ interface fileUtils {
    * Start scan operation
    * Scans for audio files in specified paths
    */
-  scan: () => Promise<void>
+  scan: (forceScan?: boolean) => Promise<void>
   scanSinglePlaylist: (playlistPath: string) => Promise<{ songs: Song[]; playlist: Partial<Playlist> | null }>
 
   getScanProgress: () => Promise<Progress>
@@ -171,7 +176,7 @@ interface preferenceUtils {
   load: () => Promise<Preferences>
   save: (preference: Preferences) => Promise<void>
   saveSelective: (key: string, value: unknown, isExtension?: boolean) => Promise<void>
-  loadSelective: <T>(key: string, isExtension?: boolean, defaultValue?: T) => Promise<T>
+  loadSelective: <T>(key: string, isExtension?: boolean, defaultValue?: T) => Promise<T | undefined>
   notifyPreferenceChanged: (key: string, value: unknown) => Promise<void>
   listenPreferenceChange: (callback: (key: string, value: unknown) => void) => void
 }
@@ -245,7 +250,7 @@ interface extensionUtils {
   uninstall: (packageName: string) => Promise<void>
   sendEvent: <T extends ExtraExtensionEventTypes>(
     event: ExtraExtensionEvents<T>
-  ) => Promise<ExtraExtensionEventCombinedReturnType<T>>
+  ) => Promise<ExtraExtensionEventCombinedReturnType<T> | undefined>
   getAllExtensions: () => Promise<ExtensionDetails[]>
   getExtensionIcon: (packageName: string) => Promise<string>
   listenRequests: (callback: (request: extensionUIRequestMessage) => void) => void
@@ -263,6 +268,10 @@ interface extensionUtils {
   listenAccountRegistered: (callback: (details: { packageName: string; data: StrippedAccountDetails }) => void) => void
   performAccountLogin: (packageName: string, accountId: string, login: boolean) => Promise<void>
   listenExtensionsChanged: (callback: () => void) => void
+  getRegisteredSearchProviders: () => Promise<Record<string, string>>
+  getRegisteredArtistSongProviders: () => Promise<Record<string, string>>
+  getRegisteredPlaylistProviders: () => Promise<Record<string, string>>
+  getRegisteredAlbumSongProviders: () => Promise<Record<string, string>>
 }
 
 /**

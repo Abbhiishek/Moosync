@@ -11,12 +11,9 @@ import { AbstractExtensionFinder, ExtensionFinder } from './extensionFinder'
 import { AbstractExtensionManager, ExtensionManager } from '@/utils/extensions/sandbox/extensionManager'
 
 import { getVersion } from '@/utils/common'
+import { providerFetchRequests } from '../constants'
 
-type CombinedSongsType =
-  | GetPlaylistSongsReturnType
-  | GetSearchReturnType
-  | GetPlaylistAndSongsReturnType
-  | GetRecommendationsReturnType
+type CombinedSongsType = SongsReturnType | PlaylistAndSongsReturnType | RecommendationsReturnType
 
 export class ExtensionHandler {
   private extensionManager: AbstractExtensionManager
@@ -108,6 +105,35 @@ export class ExtensionHandler {
     return accountMap
   }
 
+  private getFetchMethod(type: providerFetchRequests): keyof ExtendedExtensionAPI {
+    switch (type) {
+      case 'get-artist-songs-providers':
+        return '_getArtistSongProvider'
+      case 'get-album-songs-providers':
+        return '_getAlbumSongProvider'
+      case 'get-playlist-providers':
+        return '_getPlaylistProvider'
+      case 'get-search-providers':
+        return '_getSearchProvider'
+    }
+  }
+
+  public getProviderExtensions(type: providerFetchRequests) {
+    const method = this.getFetchMethod(type)
+    const map: { [key: string]: string } = {}
+
+    if (method) {
+      const ext = this.extensionManager.getExtensions()
+      for (const e of ext) {
+        if (typeof e.global.api[method] === 'function') {
+          const provider = (e.global.api[method] as () => string)()
+          if (provider) map[e.packageName] = provider
+        }
+      }
+    }
+    return map
+  }
+
   public async performExtensionAccountLogin(packageName: string, accountId: string, loginStatus: boolean) {
     const ext = this.extensionManager.getExtensions({ packageName })
     for (const e of ext) {
@@ -177,6 +203,57 @@ export class ExtensionHandler {
     this.toggleExtStatus(undefined, false)
   }
 
+  private sanitizeSong(ext: ExtensionItem, ...songs: Song[]): Song[] {
+    return songs.map((val) => ({
+      ...val,
+      artists: this.sanitizeArtists(ext, ...(val.artists ?? [])),
+      _id: `${ext.packageName}:${val._id}`,
+      providerExtension: ext.packageName
+    }))
+  }
+
+  private sanitizePlaylist(ext: ExtensionItem, ...playlists: Playlist[]): ExtendedPlaylist[] {
+    return playlists.map((val) => ({
+      ...val,
+      playlist_id: `${ext.packageName}:${val.playlist_id}`,
+      extension: ext.packageName
+    }))
+  }
+
+  private sanitizeAlbums(ext: ExtensionItem, ...albums: Album[]): Album[] {
+    return albums.map((val) => ({
+      ...val,
+      album_id: `${ext.packageName}:${val.album_id}`
+    }))
+  }
+
+  private sanitizeArtistExtraInfo(extra_info?: Record<string, unknown>) {
+    const ret: Record<string, string | undefined> = {}
+    if (extra_info) {
+      for (const [key, val] of Object.entries(extra_info)) {
+        if (typeof val !== 'string') {
+          ret[key] = JSON.stringify(val)
+        } else {
+          ret[key] = val as string
+        }
+      }
+    }
+
+    return ret
+  }
+
+  private sanitizeArtists(ext: ExtensionItem, ...artists: Artists[]): Artists[] {
+    return artists.map((val) => ({
+      ...val,
+      artist_id: `${ext.packageName}:${val.artist_id}`,
+      artist_extra_info: {
+        extensions: {
+          [ext.packageName]: this.sanitizeArtistExtraInfo(val.artist_extra_info)
+        }
+      }
+    }))
+  }
+
   public async sendExtraEventToExtensions<T extends ExtraExtensionEventTypes>(event: ExtraExtensionEvents<T>) {
     const allData: { [key: string]: ExtraExtensionEventReturnType<T> | undefined } = {}
     const EventType: T = event.type
@@ -195,39 +272,44 @@ export class ExtensionHandler {
 
       if (resp) {
         if (EventType === 'requestedPlaylists') {
-          ;(resp as GetPlaylistReturnType).playlists = (resp as GetPlaylistReturnType).playlists.map((val) => ({
-            ...val,
-            playlist_id: `${ext.packageName}:${val.playlist_id}`,
-            extension: ext.packageName
-          }))
+          ;(resp as PlaylistReturnType).playlists = this.sanitizePlaylist(
+            ext,
+            ...(resp as PlaylistReturnType).playlists
+          )
         }
 
         if (EventType === 'requestedPlaylistFromURL') {
-          const playlist: ExtendedPlaylist = (resp as GetPlaylistAndSongsReturnType).playlist
-          playlist.playlist_id = `${ext.packageName}:${playlist.playlist_id}`
-          playlist.extension = ext.packageName
-          ;(resp as GetPlaylistAndSongsReturnType).playlist = playlist
+          ;(resp as PlaylistAndSongsReturnType).playlist = this.sanitizePlaylist(
+            ext,
+            (resp as PlaylistAndSongsReturnType).playlist
+          )[0]
+          ;(resp as PlaylistAndSongsReturnType).songs = this.sanitizeSong(
+            ext,
+            ...(resp as PlaylistAndSongsReturnType).songs
+          )
         }
 
-        if (
-          EventType === 'requestedPlaylistSongs' ||
-          EventType === 'requestSearchResult' ||
-          EventType === 'requestedPlaylistFromURL' ||
-          EventType === 'requestedRecommendations'
-        ) {
-          const songs = (resp as CombinedSongsType).songs
-          ;(resp as CombinedSongsType).songs = songs.map((val) => ({
-            ...val,
-            _id: `${ext.packageName}:${val._id}`,
-            providerExtension: ext.packageName
-          }))
+        if (EventType === 'requestedPlaylistSongs' || EventType === 'requestedRecommendations') {
+          ;(resp as CombinedSongsType).songs = this.sanitizeSong(ext, ...(resp as CombinedSongsType).songs)
         }
 
         if (EventType === 'requestedSongFromURL') {
-          const song = (resp as GetSongReturnType).song
-          song._id = `${ext.packageName}:${song._id}`
-          song.providerExtension = ext.packageName
-          ;(resp as GetSongReturnType).song = song
+          ;(resp as SongReturnType).song = this.sanitizeSong(ext, (resp as SongReturnType).song)[0]
+        }
+
+        if (EventType === 'requestedSearchResult') {
+          ;(resp as SearchReturnType).songs = this.sanitizeSong(ext, ...(resp as SearchReturnType).songs)
+          ;(resp as SearchReturnType).playlists = this.sanitizePlaylist(ext, ...(resp as SearchReturnType).playlists)
+          ;(resp as SearchReturnType).artists = this.sanitizeArtists(ext, ...(resp as SearchReturnType).artists)
+          ;(resp as SearchReturnType).albums = this.sanitizeAlbums(ext, ...(resp as SearchReturnType).albums)
+        }
+
+        if (EventType === 'requestedArtistSongs') {
+          ;(resp as SongsReturnType).songs = this.sanitizeSong(ext, ...(resp as SongsReturnType).songs)
+        }
+
+        if (EventType === 'requestedAlbumSongs') {
+          ;(resp as SongsReturnType).songs = this.sanitizeSong(ext, ...(resp as SongsReturnType).songs)
         }
       }
 
@@ -253,7 +335,7 @@ export class ExtensionHandler {
   ) {
     for (const ext of this.extensionManager.getExtensions({ started: true, packageName })) {
       const item = (ext.global.api.getContextMenuItems() as ExtendedExtensionContextMenuItems<ContextMenuTypes>[]).find(
-        (val) => val.id
+        (val) => val.id === id
       )
 
       item?.handler && item.handler(arg)

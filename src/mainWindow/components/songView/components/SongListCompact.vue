@@ -10,9 +10,10 @@
 <template>
   <div class="d-flex h-100 w-100">
     <b-container fluid>
+      <TabCarousel v-on="$listeners" :items="optionalProviders" />
       <b-row no-gutters class="h-100">
         <RecycleScroller
-          class="scroller w-100 h-100"
+          class="scroller w-100 low-height"
           :items="songList"
           :item-size="94"
           key-field="_id"
@@ -41,15 +42,22 @@
 import ImgLoader from '@/utils/ui/mixins/ImageLoader'
 import SongListMixin from '@/utils/ui/mixins/SongListMixin'
 import { mixins } from 'vue-class-component'
-import { Component } from 'vue-property-decorator'
+import { Component, Prop } from 'vue-property-decorator'
 import SongListCompactItem from './SongListCompactItem.vue'
+import EllipsisIcon from '@/icons/EllipsisIcon.vue'
+import TabCarousel from '../../generic/TabCarousel.vue'
 
 @Component({
   components: {
-    SongListCompactItem
+    SongListCompactItem,
+    EllipsisIcon,
+    TabCarousel
   }
 })
 export default class SongListCompact extends mixins(ImgLoader, SongListMixin) {
+  @Prop({ default: () => [] })
+  private optionalProviders!: TabCarouselItem[]
+
   private onRowContext(event: Event, item: Song) {
     this.$emit(
       'onRowContext',
@@ -76,4 +84,7 @@ export default class SongListCompact extends mixins(ImgLoader, SongListMixin) {
 .scroller
   color: var(--textPrimary)
   transition: color 0.3s ease
+
+.low-height
+  height: calc(100% - 40px - 13px)
 </style>

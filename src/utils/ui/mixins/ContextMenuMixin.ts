@@ -23,7 +23,6 @@ export default class ContextMenuMixin extends mixins(PlayerControls, RemoteSong)
   }
 
   private async addToPlaylist(playlist_id: string, songs: Song[]) {
-    await window.DBUtils.storeSongs(songs.filter((val) => val.type !== 'LOCAL'))
     await window.DBUtils.addToPlaylist(playlist_id, ...songs)
   }
 
@@ -105,17 +104,19 @@ export default class ContextMenuMixin extends mixins(PlayerControls, RemoteSong)
     return menu
   }
 
-  private getGeneralSongsContextMenu(refreshCallback: () => void, sort?: Sort<SongSortOptions>) {
+  private getGeneralSongsContextMenu(refreshCallback?: () => void, sort?: Sort<SongSortOptions>) {
     const items: MenuItem[] = []
 
     if (sort) {
       items.push(...this.getSongSortByMenu(sort))
     }
 
-    items.push({
-      label: 'Add from URL',
-      handler: () => bus.$emit(EventBus.SHOW_SONG_FROM_URL_MODAL, refreshCallback)
-    })
+    if (refreshCallback) {
+      items.push({
+        label: 'Add from URL',
+        handler: () => bus.$emit(EventBus.SHOW_SONG_FROM_URL_MODAL, refreshCallback)
+      })
+    }
 
     return items
   }
@@ -124,7 +125,6 @@ export default class ContextMenuMixin extends mixins(PlayerControls, RemoteSong)
     exclude: string | undefined,
     refreshCallback?: () => void,
     isRemote = false,
-    sort?: Sort<SongSortOptions>,
     ...item: Song[]
   ) {
     const items: MenuItem[] = [
@@ -145,10 +145,6 @@ export default class ContextMenuMixin extends mixins(PlayerControls, RemoteSong)
         children: this.populatePlaylistMenu(item, exclude)
       }
     ]
-
-    if (sort) {
-      items.push(...this.getSongSortByMenu(sort))
-    }
 
     if (!isRemote) {
       items.push(
@@ -205,16 +201,6 @@ export default class ContextMenuMixin extends mixins(PlayerControls, RemoteSong)
 
       items.push(this.getEntityInfoMenu(playlist))
     }
-    return items
-  }
-
-  private getPlaylistContentContextMenu(
-    isRemote: boolean,
-    sort: Sort<SongSortOptions> | undefined,
-    refreshCallback: () => void,
-    ...item: Song[]
-  ) {
-    const items = this.getSongContextMenu(undefined, refreshCallback, isRemote, sort, ...item)
     return items
   }
 
@@ -312,7 +298,6 @@ export default class ContextMenuMixin extends mixins(PlayerControls, RemoteSong)
           options.args.exclude,
           options.args.refreshCallback,
           options.args.isRemote,
-          options.args.sortOptions,
           ...options.args.songs
         )
         break
@@ -331,14 +316,6 @@ export default class ContextMenuMixin extends mixins(PlayerControls, RemoteSong)
       case 'GENERAL_PLAYLIST':
         items = this.getGeneralPlaylistMenu(options.args.sort, options.args.refreshCallback)
         break
-      case 'PLAYLIST_CONTENT':
-        items = this.getPlaylistContentContextMenu(
-          options.args.isRemote,
-          options.args.sortOptions,
-          options.args.refreshCallback,
-          ...options.args.songs
-        )
-        break
       case 'QUEUE_ITEM':
         items = this.getQueueItemMenu(
           options.args.isRemote,
@@ -347,9 +324,11 @@ export default class ContextMenuMixin extends mixins(PlayerControls, RemoteSong)
           options.args.songIndex
         )
         break
-      case 'GENERIC_SORT':
+      case 'ENTITY_SORT':
         items = this.getGenericSortByMenu(options.args.sortOptions)
         break
+      case 'SONG_SORT':
+        items = this.getSongSortByMenu(options.args.sortOptions)[0].children ?? []
     }
 
     this.getExtensionItems(options.type, this.getExtensionArgs(options)).then((res) => items.push(...res))
@@ -379,8 +358,6 @@ export default class ContextMenuMixin extends mixins(PlayerControls, RemoteSong)
         return
       case 'PLAYLIST':
         return args.args.playlist
-      case 'PLAYLIST_CONTENT':
-        return args.args.songs
       case 'QUEUE_ITEM':
         return args.args.song
       case 'SONGS':

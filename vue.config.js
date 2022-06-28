@@ -6,7 +6,7 @@ const CopyWebpackPlugin = require('copy-webpack-plugin')
 const { resolve } = require('path')
 const manifest = require('./package.json')
 
-// const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
+// const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
 
 const archElectronConfig = {}
 
@@ -101,10 +101,10 @@ module.exports = {
           perMachine: true
         },
         snap: {
-          stagePackages: ['libnspr4', 'libnss3', 'libxss1', 'libappindicator3-1', 'libsecret-1-0', 'libvips-dev']
+          stagePackages: ['libnspr4', 'libnss3', 'libxss1', 'libappindicator3-1', 'libsecret-1-0']
         },
         deb: {
-          depends: ['libnotify4', 'libxtst6', 'libnss3', 'libvips-dev']
+          depends: ['libnotify4', 'libxtst6', 'libnss3']
         },
         fileAssociations: [
           {
@@ -176,7 +176,6 @@ module.exports = {
       preload: 'src/utils/preload/preload.ts',
       externals: ['better-sqlite3', 'vm2', 'sharp'],
       chainWebpackMainProcess: (config) => {
-        console.log(process.env.NODE_ENV)
         if (process.env.NODE_ENV === 'production') {
           config.devtool('source-map').end()
         }
@@ -213,6 +212,8 @@ module.exports = {
         config.plugin('thread').use(ThreadsPlugin, [{ target: 'electron-node-worker' }])
 
         config.plugin('copy').use(CopyWebpackPlugin, [{ patterns: [{ from: resolve('dev-app-update.yml') }] }])
+
+        // config.plugin('copy').use(BundleAnalyzerPlugin)
       }
     },
     autoRouting: {

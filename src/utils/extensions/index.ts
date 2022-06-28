@@ -9,7 +9,7 @@
 
 import { ChildProcess, fork, Serializable } from 'child_process'
 import { app, ipcMain, shell } from 'electron'
-import { extensionUIRequestsKeys, mainRequests } from '@/utils/extensions/constants'
+import { extensionUIRequestsKeys, mainRequests, providerFetchRequests } from '@/utils/extensions/constants'
 import { loadSelectivePreference, saveSelectivePreference } from '../main/db/preferences'
 
 import { ExtensionHostEvents } from '@/utils/main/ipc/constants'
@@ -197,11 +197,27 @@ class MainRequestGenerator {
   }
 
   public async getAccounts() {
-    return this.sendAsync<StrippedAccountDetails[]>('get-accounts')
+    return this.sendAsync<Record<string, StrippedAccountDetails[]>>('get-accounts')
   }
 
   public async performAccountLogin(packageName: string, accountId: string, loginStatus: boolean) {
     return this.sendAsync<void>('perform-account-login', { packageName, accountId, loginStatus })
+  }
+
+  public async getSearchProviders() {
+    return this.sendAsync<Record<string, string>>('get-search-providers')
+  }
+
+  public async getArtistSongProviders() {
+    return this.sendAsync<Record<string, string>>('get-artist-songs-providers')
+  }
+
+  public async getPlaylistProviders() {
+    return this.sendAsync<Record<string, string>>('get-playlist-providers')
+  }
+
+  public async getAlbumSongProviders() {
+    return this.sendAsync<Record<string, string>>('get-album-songs-providers')
   }
 
   public async sendContextMenuItemClicked(
@@ -212,7 +228,7 @@ class MainRequestGenerator {
     return this.sendAsync<void>('on-clicked-context-menu', { id, packageName, arg })
   }
 
-  private sendAsync<T>(type: mainRequests, data?: unknown): Promise<T> {
+  private sendAsync<T>(type: mainRequests | providerFetchRequests, data?: unknown): Promise<T> {
     const channel = v4()
 
     return new Promise<T>((resolve) => {
@@ -347,6 +363,18 @@ class ExtensionRequestHandler {
         packageName: message.extensionName,
         data: message.data
       })
+    }
+
+    if (message.type === 'set-artist-editable-info') {
+      if (typeof message.data.artist_id === 'string' && message.data.object) {
+        SongDB.updateArtistExtraInfo(message.data.artist_id, message.data.object, message.extensionName)
+      }
+    }
+
+    if (message.type === 'set-album-editable-info') {
+      if (typeof message.data.album_id === 'string' && message.data.object) {
+        SongDB.updateAlbumExtraInfo(message.data.album_id, message.data.object, message.extensionName)
+      }
     }
 
     if (
