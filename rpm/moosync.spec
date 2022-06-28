@@ -5,12 +5,11 @@
 
 Summary: Moosync is a customizable desktop music player with a clean interface
 Name: moosync
-Version: 3.0.1
+Version: 4.0.0
 Release: 1
 URL: https://github.com/Moosync/Moosync
 License: GPLv3+
 Group: Applications/Multimedia
-Source0: %{url}/releases/download/v%{version}/Moosync-%{version}-linux-x86_64.rpm
 ExclusiveArch: x86_64
 
 Requires: vips >= 8, libffi7
@@ -36,7 +35,7 @@ Features
   * Available on Windows and Linux and MacOS
 
 %prep
-rpm2cpio %{SOURCE0} | cpio -idmv
+rpm2cpio %{url}/releases/download/v%{version}/Moosync-%{version}-linux-x86_64.rpm | cpio -idmv
 sed -i 's|/opt/Moosync/moosync|%{_libdir}/%{name}/moosync|' \
     %{_builddir}/usr/share/applications/moosync.desktop
 
